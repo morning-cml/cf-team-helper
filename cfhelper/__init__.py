@@ -1,4 +1,11 @@
 # -*- coding: utf-8 -*-
+#
+# CF 团队助手 —— Codeforces 团队辅助工具
+# Copyright (C) 2026 morning-cml <https://github.com/morning-cml>
+#
+# 本程序是自由软件：你可以依据 GNU 通用公共许可证 v3（或任你选择的更新版本）
+# 的条款再分发和/或修改它。分发修改版时必须同样开源、保留本声明并标注改动。
+# 本程序不附带任何担保。许可证全文见随附的 LICENSE，或 <https://www.gnu.org/licenses/>。
 """CF 辅助工具 —— 应用工厂。"""
 import threading
 
