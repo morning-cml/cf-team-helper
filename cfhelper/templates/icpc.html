@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}ICPC 比赛库 | CF 团队助手{% endblock %}
+
+{% block body %}
+<div class="card">
+  <h2>🏆 ICPC 比赛库 <span style="font-size:.62em;opacity:.75;font-weight:400;">共 {{ contests|length }} 场</span>
+    <button class="btn-ghost" style="margin-left:auto;font-size:.62em;" onclick="icpcRefresh(this)">🔄 重拉比赛库</button>
+  </h2>
+  <p class="muted">收录 Codeforces 上中国赛事为主的 ICPC / CCPC 体系比赛，按级别分四档。
+    填入用户名即可自动标出<strong>你（或全队）做过哪些题</strong>——Gym 提交也算得进来。</p>
+
+  <form method="post" class="search-box" id="icpcForm">
+    <input type="text" name="handles" id="icpcInput" value="{{ prefill }}"
+           placeholder="用户名，逗号分隔可看全队合并战绩（最多 {{ team_max }} 人），留空只浏览题库">
+    <button type="submit" class="btn-primary">📊 标记完成情况</button>
+  </form>
+  {% if army %}
+  <div style="margin-top:12px;">
+    <span class="muted">从大部队快速填入：</span>
+    {% for m in army %}<span class="chip pick-army" data-h="{{ m.handle }}">{{ m.handle }}</span>{% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- 题单覆盖情况：决定完成度显示成 3/13 还是"已解出 3 题" -->
+  <div class="icpc-cover" id="icpcCover"
+       data-covered="{{ fetch_state.covered }}" data-total="{{ fetch_state.total_contests }}">
+    {% if not fetch_state.has_key %}
+    <span class="muted">📄 题单覆盖 <b>{{ fetch_state.covered }}/{{ fetch_state.total_contests }}</b> 场
+      —— 其余为 Gym 场次，需配置 CF API 密钥才能取到题目总数（现显示「已解出 N 题」）。
+      配置方法见 <code>tools/verify_cf_key.py</code>。</span>
+    {% elif fetch_state.missing %}
+    <span>📄 题单覆盖 <b>{{ fetch_state.covered }}/{{ fetch_state.total_contests }}</b> 场，
+      还有 <b>{{ fetch_state.missing }}</b> 场未抓取（抓完才能显示 <code>3/13</code> 这样的精确进度）。</span>
+    <button class="btn-primary" id="icpcFetchBtn" onclick="icpcFetch(this)"
+            style="padding:6px 14px;font-size:.85em;">📥 抓取题单（约 {{ [(fetch_state.missing * 1.8 / 60)|round|int, 1]|max }} 分钟，只需一次）</button>
+    {% else %}
+    <span class="muted">📄 题单已覆盖 <b>{{ fetch_state.covered }}/{{ fetch_state.total_contests }}</b> 场，完成度显示为精确的「解出 / 总题数」。
+      {% if fetch_state.unavailable %}另有 {{ fetch_state.unavailable }} 场 CF 未开放榜单（受限赛事），只能显示「已解出 N 题」。{% endif %}</span>
+    {% endif %}
+    <div class="icpc-progress" id="icpcFetchProgress" style="display:none;">
+      <div class="icpc-progress-bar"><div class="icpc-progress-fill" id="icpcFetchFill"></div></div>
+      <span class="muted" id="icpcFetchText"></span>
+    </div>
+  </div>
+</div>
+
+{% if errors %}
+<div class="alert">⚠️ 以下用户名查询失败：{{ errors|join('、') }}</div>
+{% endif %}
+
+{% if stats %}
+<div class="card">
+  <h3>📈 战绩总览</h3>
+  <div class="reco-grid">
+    {% for s in stats %}
+    <div class="reco-card icpc-stat {{ s.cls }}">
+      <span class="reco-name">{{ s.name }}</span>
+      <div class="icpc-stat-num">{{ s.touched }} <span class="muted">/ {{ s.total }} 场</span></div>
+      <div class="muted" style="font-size:.85em;">累计解出 <b>{{ s.solved }}</b> 题</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="filter-row" id="icpcTierFilter">
+    <span class="chip active" data-tier="all">全部档位</span>
+    {% for t in tiers %}<span class="chip" data-tier="{{ t.key }}">{{ t.name }}</span>{% endfor %}
+  </div>
+  <div class="filter-row">
+    <select id="icpcYear">
+      <option value="all">全部年份</option>
+      {% for y in years %}<option value="{{ y }}">{{ y }}</option>{% endfor %}
+    </select>
+    <input type="text" id="icpcSearch" placeholder="搜索比赛名，如 南京 / Nanjing / CCPC"
+           style="flex:1;min-width:200px;">
+    {% if progress %}
+    <label class="icpc-toggle"><input type="checkbox" id="icpcOnlyDone"> 只看做过的</label>
+    {% endif %}
+  </div>
+  <p class="muted" id="icpcCount" style="margin:10px 0 0;"></p>
+</div>
+
+{% for t in tiers %}
+{% set group = contests | selectattr('tier', 'equalto', t.key) | list %}
+{% if group %}
+<div class="card icpc-group" data-tier="{{ t.key }}">
+  <h3><span class="tier-badge {{ t.cls }}">{{ t.name }}</span>
+    <span class="muted" style="font-size:.72em;font-weight:400;">{{ t.desc }} · {{ group|length }} 场</span></h3>
+  <div class="icpc-list">
+    {% for c in group %}
+    {% set p = progress.get(c.id) if progress else none %}
+    <div class="icpc-item{{ ' is-done' if p else '' }}"
+         data-tier="{{ c.tier }}" data-year="{{ c.year }}"
+         data-name="{{ c.name|lower }}" data-done="{{ 1 if p else 0 }}">
+      <span class="icpc-year">{{ c.year or '—' }}</span>
+      <a class="icpc-name" href="{{ c.url }}" target="_blank">{{ c.name }}</a>
+      <span class="icpc-src">{{ 'Gym' if c.gym else '官方' }}</span>
+      {% if p %}
+      <span class="icpc-prog">
+        {% if p.total %}<b>{{ p.count }}/{{ p.total }}</b>
+          <span class="icpc-pct{{ ' full' if p.pct == 100 else '' }}">{{ p.pct }}%</span>
+        {% else %}已解出 <b>{{ p.count }}</b> 题{% endif %}
+        {% if p.tried %}<span class="icpc-tried-n">{{ p.tried }} 题未攻克</span>{% endif %}
+      </span>
+      {% if p.total %}
+      <span class="icpc-bar"><i style="width:{{ p.pct }}%"></i></span>
+      {% endif %}
+      <!-- 逐题状态网格：绿=解出 红=交过没做出 灰=没碰过 -->
+      <span class="icpc-probs">
+        {% for q in p.problems %}
+        <a class="pq pq-{{ q.state }}" href="{{ q.url }}" target="_blank"
+           title="{{ q.i }}. {{ q.n or '（题名未知）' }}{% if q.r %} · 难度 {{ q.r }}{% endif %}&#10;{% if q.state == 'solved' %}已解出{% if q.who|length %}（{{ q.who|join('、') }}）{% endif %}{% elif q.state == 'tried' %}交过但没做出来{% else %}还没碰过{% endif %}">{{ q.i }}</a>
+        {% endfor %}
+      </span>
+      {% else %}
+      <span class="icpc-prog muted">—</span>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% endfor %}
+{% endblock %}
+
+{% block scripts %}<script src="{{ url_for('static', filename='js/icpc.js') }}"></script>{% endblock %}

@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from flask import jsonify, render_template, request
 
-from . import analysis, army, cf_api, config, contests, todo
+from . import analysis, army, cf_api, config, contests, icpc, todo
 
 
 def _parallel_map(fn, items):
@@ -323,6 +323,62 @@ def register(app):
         return render_template("vs.html", result=result, errors=errors,
                                prefill_a=prefill_a, prefill_b=prefill_b,
                                army=army.load_army())
+
+    # ==================== ICPC 比赛库 ====================
+    @app.route("/icpc", methods=["GET", "POST"])
+    def icpc_page():
+        _touch()
+        items = icpc.get_contests()
+        errors, prefill, progress, stats = [], "", {}, None
+
+        if request.method == "POST":
+            handles = request.form.get("handles", "").replace("，", ",").strip()
+            prefill = handles
+            hlist = [x.strip() for x in handles.split(",") if x.strip()][:config.TEAM_MAX_SIZE]
+            errors += [h for h in hlist if not cf_api.is_valid_handle(h)]
+            hlist = [h for h in hlist if cf_api.is_valid_handle(h)]
+            fetched = _parallel_map(lambda h: (h, cf_api.get_submissions(h)), hlist)
+            members = []
+            for h, subs in fetched:
+                if subs is None:
+                    errors.append(h)
+                else:
+                    members.append((h, icpc.solved_by_contest(subs)))
+            if members:
+                progress = icpc.merge_progress(items, members)
+                stats = icpc.progress_stats(items, progress)
+
+        years = sorted({c["year"] for c in items if c["year"]}, reverse=True)
+        return render_template(
+            "icpc.html", contests=items, tiers=list(reversed(icpc.TIERS)),
+            years=years, errors=errors, prefill=prefill,
+            progress=progress, stats=stats, army=army.load_army(),
+            team_max=config.TEAM_MAX_SIZE,
+            fetch_state=icpc.problem_fetch_state(items),
+        )
+
+    @app.route("/api/icpc/fetch_problems", methods=["POST"])
+    def api_icpc_fetch():
+        """启动后台抓取各场题单（需 API 密钥）。历史赛事题单不变，全程只需跑一次。"""
+        items = icpc.get_contests()
+        started = icpc.fetch_problem_lists(items)
+        st = icpc.problem_fetch_state(items)
+        if not started and not st["has_key"]:
+            return jsonify({"success": False, "msg": "未配置 CF API 密钥，无法抓取 Gym 题单"})
+        return jsonify({"success": True, "started": started, "state": st,
+                        "msg": "已在后台抓取" if started else "抓取已在进行中"})
+
+    @app.route("/api/icpc/fetch_state")
+    def api_icpc_fetch_state():
+        return jsonify(icpc.problem_fetch_state(icpc.get_contests()))
+
+    @app.route("/api/icpc/refresh", methods=["POST"])
+    def api_icpc_refresh():
+        """手动重拉比赛库（新赛季比赛出现时用；平时走 7 天缓存）。"""
+        items = icpc.get_contests(force=True)
+        return jsonify({"success": bool(items), "count": len(items),
+                        "msg": f"已刷新，共收录 {len(items)} 场" if items
+                               else "刷新失败，请检查网络"})
 
     # ==================== 题单 / 待做收藏 ====================
     @app.route("/todo")

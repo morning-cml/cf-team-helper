@@ -17,6 +17,7 @@
   <nav class="topnav">
     <a href="/"       class="{{ 'active' if request.path == '/' else '' }}">🏠 首页</a>
     <a href="/picker" class="{{ 'active' if request.path == '/picker' else '' }}">🎲 刷题器</a>
+    <a href="/icpc"   class="{{ 'active' if request.path == '/icpc' else '' }}">🏆 ICPC</a>
     <a href="/team"   class="{{ 'active' if request.path == '/team' else '' }}">🤝 组队作战</a>
     <a href="/vs"     class="{{ 'active' if request.path == '/vs' else '' }}">🆚 对比</a>
     <a href="/todo"   class="{{ 'active' if request.path == '/todo' else '' }}">⭐ 题单{% if todo_count %} <span class="nav-badge">{{ todo_count }}</span>{% endif %}</a>

@@ -8,7 +8,10 @@
 - 全局信号量把同时在飞的请求压到 HTTP_MAX_CONCURRENCY，既能并行加速又不触发 CF 限流；
 - info / status / rating 三类用户数据带进程内 TTL 缓存，重复查询 / army 点详情直接命中。
 """
+import hashlib
+import random
 import re
+import string
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -16,6 +19,7 @@ from concurrent.futures import ThreadPoolExecutor
 import requests
 
 from . import config
+from .paths import read_json
 
 # CF 用户名合法字符：字母/数字/下划线/连字符/点，长度 1-24。
 # 提前挡掉空格、引号、逗号残留等垃圾输入，省掉注定失败的网络请求，错误也更清晰。
@@ -183,9 +187,13 @@ def fetch_user_bundle(handle):
 
 
 # ==================== 比赛列表（未来比赛日历用） ====================
-def get_contest_list():
-    """返回 contest.list 原始结果列表；失败返回 None。"""
-    data = _get(config.CF_CONTESTS_API)
+def get_contest_list(gym=False):
+    """返回 contest.list 原始结果列表；失败返回 None。
+
+    gym=True 取练习场比赛（ICPC 历年真题绝大多数在这里，实测 2599 场）。
+    这份数据一次请求即可拿全，但体积大、耗时约十几秒，调用方应自行缓存。
+    """
+    data = _get(config.CF_CONTEST_LIST_API, {"gym": "true" if gym else "false"})
     if data is None:
         return None
     return data["result"]
@@ -219,6 +227,72 @@ def load_problem_cache(force=False):
             })
         _problem_loaded = True
         print(f"✅ 题库缓存完成：{len(PROBLEM_RATING)} 题带难度分")
+
+
+# ==================== 带签名的授权请求（可选，用于访问 Gym） ====================
+# Gym 比赛的 contest.standings 匿名调用会返回 "You have to be authenticated"，
+# 带 API 签名后可正常访问（已实测）。没配密钥时全部功能照常，只是拿不到 gym 题单。
+_cred = None
+_cred_loaded = False
+_cred_lock = threading.Lock()
+
+
+def api_credentials():
+    """读取 data/cf_api.json 里的 {key, secret}；没配或不完整返回 None。"""
+    global _cred, _cred_loaded
+    with _cred_lock:
+        if not _cred_loaded:
+            cfg = read_json(config.API_KEY_FILE) or {}
+            k, s = cfg.get("key"), cfg.get("secret")
+            _cred = (k, s) if k and s else None
+            _cred_loaded = True
+        return _cred
+
+
+def reload_credentials():
+    """密钥文件改动后强制重读（页面上填完密钥即时生效）。"""
+    global _cred_loaded
+    with _cred_lock:
+        _cred_loaded = False
+
+
+def has_api_key():
+    return api_credentials() is not None
+
+
+def _sign(method, params, key, secret):
+    """按 CF 规则签名：apiSig = <rand> + sha512(<rand>/<method>?<字典序参数>#<secret>)。"""
+    p = dict(params)
+    p["apiKey"] = key
+    p["time"] = str(int(time.time()))
+    rand = "".join(random.choice(string.ascii_lowercase + string.digits) for _ in range(6))
+    query = "&".join(f"{k}={v}" for k, v in sorted(p.items(), key=lambda kv: (kv[0], str(kv[1]))))
+    p["apiSig"] = rand + hashlib.sha512(f"{rand}/{method}?{query}#{secret}".encode()).hexdigest()
+    return p
+
+
+def get_contest_problem_indices(contest_id, gym=False):
+    """取某场比赛的题号列表（如 ['A','B',...]）。拿不到返回 None。
+
+    签名与否必须按 gym 区分，这是 CF 的一个反直觉规则（实测踩过）：
+    - Gym 场匿名调用 → "You have to be authenticated to use this method"，必须签名；
+    - 非 Gym 场带签名 → "Non-gym contest standings for non-admin users are available
+      only via anonymous GET"，反而必须匿名。
+    一律签名或一律匿名都会漏掉一半。
+
+    只取 count=1 行榜单，服务端仍会带回完整 problems 数组，是最省流量的拿法。
+    返回 [(题号, 题名), ...]；gym 题目有题名但没有 rating / tags。
+    """
+    params = {"contestId": contest_id, "from": 1, "count": 1}
+    if gym:
+        cred = api_credentials()
+        if not cred:
+            return None                      # 没密钥就拿不到 gym 题单，调用方自行降级
+        params = _sign("contest.standings", params, *cred)
+    data = _get(f"{config.CF_API_BASE}/contest.standings", params)
+    if not data:
+        return None
+    return [[p["index"], p.get("name", "")] for p in data["result"]["problems"]]
 
 
 def problem_rating(key, default=0):

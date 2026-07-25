@@ -335,6 +335,139 @@ def test_atomic_json_and_corrupt_backup():
                 os.remove(p)
 
 
+def test_icpc_classify():
+    """ICPC 四档分类：用实测踩过的真实比赛名做回归。
+
+    这些名字全部取自 CF 线上数据，每一条都对应一个曾经分错的坑。
+    """
+    from cfhelper import icpc
+    cases = [
+        # —— 应当排除 ——
+        ("2019 Google Code Jam World Finals (GCJ 19 World Finals)", None),   # 名字带 World Finals 但非 ICPC
+        ("2013-2014 CT S01E04: 2013 Kashan Contest + Some Problems of 2009 GCJ", None),
+        ("2025 Xian Jiaotong University Programming Contest", None),        # 只是名字带城市的校赛
+        ("Dalian University of Technology, Software College 2025 Freshman Contest", None),
+        ("The 2025 CCPC Harbin Onsite Warmup", None),                       # 热身赛不是正赛
+        ("2016-2017 National Taiwan University World Final Team Selection Contest", None),
+        ("[Unofficial Mirror] 2026 CCPC National Invitational (Nanchang)", None),
+        # —— 训练赛后缀不得误杀正赛 ——
+        ("The 2021 ICPC Asia Nanjing Regional Contest (XXII Open Cup, Grand Prix of Nanjing)", "regional"),
+        ("The 2024 ICPC Asia Hangzhou Regional Contest (The 3rd Universal Cup. Stage 25)", "regional"),
+        # —— 站点赛的两种命名 ——
+        ("2020 ICPC Shanghai Site", "regional"),
+        ("The 2024 ICPC Asia Nanjing Regional Contest", "regional"),
+        ("2024 China Collegiate Programming Contest (CCPC) Jinan Site", "regional"),
+        ("CCPC 2016-2017, Finals", "regional"),
+        ("2016-2017 ACM-ICPC CHINA-Final", "regional"),
+        # —— 其余三档 ——
+        ("2023 ICPC World Finals", "wf"),
+        ("2021 ICPC Asia East Continent Final", "ecfinal"),
+        ("2017-2018 ACM-ICPC Asia East Continent League Final (ECL-Final 2017)", "ecfinal"),
+        ("The 21st Hunan Provincial Collegiate Programming Contest", "provincial"),
+        ("2026 National Invitational of CCPC (Fujian)", "provincial"),
+    ]
+    for name, want in cases:
+        got = icpc.classify(name)
+        assert got == want, f"{name!r} 期望 {want}，实得 {got}"
+
+
+def test_icpc_progress_merge():
+    """完成度合并：gym 场没有分母，正式场有；多人取并集且保留各自明细。"""
+    from cfhelper import icpc
+    contests = [{"id": 900001, "name": "gym 场", "tier": "regional", "gym": True,
+                 "year": 2024, "start_ts": 0, "url": ""},
+                {"id": 1234, "name": "官方场", "tier": "wf", "gym": False,
+                 "year": 2024, "start_ts": 0, "url": ""}]
+    saved = list(cf_api.PROBLEMS)
+    cf_api.PROBLEMS[:] = [{"key": f"1234_{i}", "contest_id": 1234, "index": i,
+                           "name": i, "rating": 2000, "tags": []} for i in "ABCD"]
+    try:
+        a = {900001: {"solved": ["A", "C"], "tried": ["A", "C"], "names": {}},
+             1234:   {"solved": ["A"], "tried": ["A", "B"], "names": {}}}   # B 交过没做出
+        b = {900001: {"solved": ["C", "D"], "tried": ["C", "D"], "names": {}}}
+        prog = icpc.merge_progress(contests, [("alice", a), ("bob", b)])
+
+        gym = prog[900001]
+        assert gym["solved"] == ["A", "C", "D"] and gym["count"] == 3   # 并集去重
+        assert gym["total"] is None and gym["pct"] is None              # gym 无题单
+        assert gym["by_handle"] == {"alice": ["A", "C"], "bob": ["C", "D"]}
+        assert gym["known"] is False                                    # 没题单 -> 只列做过的
+        assert [q["i"] for q in gym["problems"]] == ["A", "C", "D"]
+
+        off = prog[1234]
+        assert off["total"] == 4 and off["count"] == 1 and off["pct"] == 25   # 官方场有分母
+        assert off["tried"] == 1 and off["known"] is True                # B 交过但没做出来
+        states = {q["i"]: q["state"] for q in off["problems"]}
+        assert states == {"A": "solved", "B": "tried", "C": "none", "D": "none"}
+        assert off["problems"][0]["who"] == ["alice"]                    # 谁做出来的
+        assert off["problems"][0]["url"].endswith("/contest/1234/problem/A")
+
+        stats = {s["name"]: s for s in icpc.progress_stats(contests, prog)}
+        assert stats["区域赛"]["touched"] == 1 and stats["区域赛"]["solved"] == 3
+        assert stats["EC-Final"]["touched"] == 0                        # 没碰过的档为 0
+    finally:
+        cf_api.PROBLEMS[:] = saved
+
+
+def test_cf_api_signature():
+    """CF 签名算法：apiSig = <rand> + sha512(<rand>/<method>?<字典序参数>#<secret>)。
+
+    用固定输入自己算一遍比对，确保参数排序 / 拼接格式没写错——签名错了
+    CF 只回一句含糊的 FAILED，很难从现象反推。
+    """
+    import hashlib
+    p = cf_api._sign("contest.standings", {"contestId": 105255, "from": 1, "count": 1},
+                     "KEY123", "SECRET456")
+    assert p["apiKey"] == "KEY123" and "time" in p
+    sig = p.pop("apiSig")
+    rand = sig[:6]
+    query = "&".join(f"{k}={v}" for k, v in sorted(p.items(), key=lambda kv: (kv[0], str(kv[1]))))
+    want = hashlib.sha512(f"{rand}/contest.standings?{query}#SECRET456".encode()).hexdigest()
+    assert sig[6:] == want, "签名与手工计算不一致"
+    # 参数必须按字典序，apiKey 应排在 contestId 之前
+    assert query.index("apiKey") < query.index("contestId") < query.index("count")
+
+
+def test_icpc_problem_list_states():
+    """题单三态：已覆盖 / 没抓过 / 抓过但 CF 不开放。
+
+    第三种必须和第二种分开——否则页面会一直催用户去抓那些永远抓不到的受限赛事。
+    """
+    from cfhelper import icpc
+    from cfhelper.paths import data_path
+    orig_file, orig_plist = config.ICPC_PROBLEMS_FILE, icpc._plist
+    config.ICPC_PROBLEMS_FILE = "cf_icpc_problems_test.json"
+    path = data_path(config.ICPC_PROBLEMS_FILE)
+    saved = list(cf_api.PROBLEMS)
+    try:
+        # 111 用新格式（带题名），444 用旧格式（只有题号）—— 两种都要能读
+        icpc._plist = {"111": [["A", "Alpha"], ["B", "Beta"], ["C", "Gamma"]],
+                       "222": [],                            # 抓过但 CF 不开放
+                       "444": ["A", "B"]}
+        cf_api.PROBLEMS[:] = []
+        contests = [{"id": 111, "gym": True, "tier": "regional"},
+                    {"id": 222, "gym": True, "tier": "regional"},
+                    {"id": 333, "gym": True, "tier": "regional"}]
+        assert [p["i"] for p in icpc.contest_problems(111)] == ["A", "B", "C"]
+        assert icpc.contest_problems(111)[0]["n"] == "Alpha"  # 题名读得出
+        assert icpc.contest_problems(222) is None             # 空列表按拿不到处理
+        assert icpc.contest_problems(333) is None
+        legacy = icpc.contest_problems(444)                   # 旧格式向后兼容
+        assert [p["i"] for p in legacy] == ["A", "B"] and legacy[0]["n"] == ""
+        st = icpc.problem_fetch_state(contests)
+        assert st["covered"] == 1 and st["unavailable"] == 1 and st["missing"] == 1
+
+        # 没配密钥时，全是 gym 的任务不该启动（省掉注定失败的请求）
+        if not cf_api.has_api_key():
+            assert icpc.fetch_problem_lists(contests) is False
+    finally:
+        config.ICPC_PROBLEMS_FILE, icpc._plist = orig_file, orig_plist
+        cf_api.PROBLEMS[:] = saved
+        for p in (path, path + ".tmp", path + ".bad"):
+            if os.path.exists(p):
+                os.remove(p)
+
+
 def test_state_changing_endpoints_guarded():
     """改状态的端点必须 POST-only 且拒绝跨站 Origin。
 
@@ -407,21 +540,26 @@ def test_render_offline():
     """
     from cfhelper import create_app
     from cfhelper.paths import data_path
-    orig_getter, orig_file = cf_api.get_contest_list, config.CONTEST_CACHE_FILE
-    cf_api.get_contest_list = lambda: []          # 拦掉比赛列表网络请求
+    orig_getter = cf_api.get_contest_list
+    orig_files = (config.CONTEST_CACHE_FILE, config.ICPC_CACHE_FILE)
+    # 签名要跟真函数一致：ICPC 比赛库会以 gym=True 调用它，只写 lambda: [] 会 TypeError
+    cf_api.get_contest_list = lambda gym=False: []
     config.CONTEST_CACHE_FILE = "cf_contests_test.json"
-    path = data_path(config.CONTEST_CACHE_FILE)
+    config.ICPC_CACHE_FILE = "cf_icpc_test.json"
+    paths = [data_path(config.CONTEST_CACHE_FILE), data_path(config.ICPC_CACHE_FILE)]
     try:
         client = create_app().test_client()
-        for p in ("/", "/picker", "/team", "/vs", "/todo"):
+        for p in ("/", "/picker", "/icpc", "/team", "/vs", "/todo"):
             r = client.get(p)
             assert r.status_code == 200, f"{p} -> {r.status_code}"
             assert "CF 团队助手".encode() in r.data
     finally:
-        cf_api.get_contest_list, config.CONTEST_CACHE_FILE = orig_getter, orig_file
-        for p in (path, path + ".tmp", path + ".bad"):
-            if os.path.exists(p):
-                os.remove(p)
+        cf_api.get_contest_list = orig_getter
+        config.CONTEST_CACHE_FILE, config.ICPC_CACHE_FILE = orig_files
+        for base in paths:
+            for p in (base, base + ".tmp", base + ".bad"):
+                if os.path.exists(p):
+                    os.remove(p)
 
 
 def run_offline():

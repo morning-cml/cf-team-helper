@@ -1,10 +1,10 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """集中配置：所有常量、等级表、难度分档、比赛校准数据。
 
 这里只放纯数据，不依赖 Flask / requests，方便单独测试与复用。
 """
 
-APP_VERSION = "2.7"
+APP_VERSION = "2.8"
 
 # ==================== CF API 端点 ====================
 CF_API_BASE      = "https://codeforces.com/api"
@@ -13,6 +13,7 @@ CF_STATUS_API    = f"{CF_API_BASE}/user.status"
 CF_RATING_API    = f"{CF_API_BASE}/user.rating"        # 正确的比赛/Rating历史端点（旧版误用 user.contests）
 CF_PROBLEM_API   = f"{CF_API_BASE}/problemset.problems"
 CF_CONTESTS_API  = f"{CF_API_BASE}/contest.list?gym=false"
+CF_CONTEST_LIST_API = f"{CF_API_BASE}/contest.list"    # gym 由参数控制，供 ICPC 比赛库使用
 
 # 统一请求超时（秒）与轻量重试
 HTTP_TIMEOUT = 12
@@ -28,6 +29,12 @@ USER_CACHE_MAX = 30
 
 # ==================== 运行参数 ====================
 CONTEST_CACHE_FILE   = "cf_upcoming_contests.json"
+ICPC_CACHE_FILE      = "cf_icpc_contests.json"   # ICPC 比赛库缓存
+ICPC_CACHE_SECONDS   = 7 * 86400   # 历年赛事几乎不变，缓存一周；新赛季可在页面上手动刷新
+ICPC_PROBLEMS_FILE   = "cf_icpc_problems.json"   # 各场比赛的题号列表：历史赛事不变，永久缓存
+API_KEY_FILE         = "cf_api.json"             # 可选的 CF API 密钥（访问 Gym 题单用）
+# 抓题单时每场之间的间隔秒数。实测串行连打 1.47s/场不触发限流，留一点余量更稳。
+ICPC_FETCH_DELAY     = 0.3
 ARMY_FILE            = "cf_army.json"
 TODO_FILE            = "cf_todo.json"           # 题单/待做收藏（跨会话保留）
 CACHE_EXPIRE_SECONDS = 3600          # 比赛列表缓存有效期

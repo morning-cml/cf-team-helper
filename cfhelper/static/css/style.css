@@ -293,6 +293,53 @@ table.vs-stat td:nth-child(2){color:var(--muted);font-size:.92em;}
 .todo-actions{display:flex;gap:8px;margin-left:auto;}
 .todo-btn{padding:6px 12px;font-size:.82em;}
 
+/* ==================== ICPC 比赛库 ==================== */
+.tier-badge{display:inline-block;padding:3px 12px;border-radius:6px;color:#fff;
+  font-size:.82em;font-weight:700;vertical-align:middle;}
+.tier-prov{background:#16a085;}.tier-reg{background:#2980b9;}
+.tier-ec{background:#8e44ad;}.tier-wf{background:#c0392b;}
+.icpc-stat{border-left-width:5px;}
+.icpc-stat.tier-prov{border-left-color:#16a085;background:var(--bg-soft);}
+.icpc-stat.tier-reg{border-left-color:#2980b9;background:var(--bg-soft);}
+.icpc-stat.tier-ec{border-left-color:#8e44ad;background:var(--bg-soft);}
+.icpc-stat.tier-wf{border-left-color:#c0392b;background:var(--bg-soft);}
+.icpc-stat-num{font-size:1.5em;font-weight:800;color:var(--text);margin:4px 0 2px;}
+.icpc-list{display:flex;flex-direction:column;gap:6px;margin-top:10px;}
+.icpc-item{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 13px;
+  background:var(--bg-soft);border:1px solid var(--border);border-radius:8px;
+  border-left:3px solid transparent;font-size:.92em;}
+.icpc-item.is-done{border-left-color:var(--success);background:rgba(46,204,113,.08);}
+.icpc-year{width:44px;flex-shrink:0;font-weight:700;color:var(--muted);font-size:.9em;}
+.icpc-name{flex:1;min-width:220px;font-weight:600;}
+.icpc-src{font-size:.74em;padding:1px 7px;border-radius:4px;background:var(--border);
+  color:var(--muted);flex-shrink:0;}
+.icpc-prog{flex-shrink:0;font-size:.88em;min-width:104px;text-align:right;}
+.icpc-prog b{color:var(--success);}
+.icpc-idx{display:block;font-size:.82em;color:var(--muted);letter-spacing:1px;}
+.icpc-who{flex-basis:100%;display:flex;gap:5px;flex-wrap:wrap;padding-left:54px;}
+.icpc-toggle{display:flex;align-items:center;gap:6px;font-size:.9em;color:var(--text);cursor:pointer;}
+/* 逐题状态方块：绿=解出 红=交过没做出 灰=没碰过 */
+.icpc-probs{flex-basis:100%;display:flex;flex-wrap:wrap;gap:4px;padding-left:54px;margin-top:2px;}
+.pq{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:26px;
+  padding:0 5px;border-radius:5px;font-size:.8em;font-weight:700;text-decoration:none;
+  border:1px solid var(--border);transition:transform .12s;}
+.pq:hover{transform:translateY(-2px);text-decoration:none;}
+.pq-solved{background:#2ecc71;color:#fff;border-color:#27ae60;}
+.pq-tried{background:rgba(231,76,60,.16);color:var(--danger);border-color:var(--danger);}
+.pq-none{background:var(--bg-elev);color:var(--muted);}
+.icpc-pct{font-size:.85em;color:var(--muted);margin-left:3px;}
+.icpc-pct.full{color:var(--success);font-weight:700;}
+.icpc-tried-n{display:block;font-size:.78em;color:var(--danger);}
+.icpc-bar{flex-basis:100%;height:4px;background:var(--border);border-radius:2px;
+  margin:5px 0 0 54px;max-width:calc(100% - 54px);overflow:hidden;}
+.icpc-bar i{display:block;height:100%;background:linear-gradient(90deg,#3498db,#2ecc71);border-radius:2px;}
+.icpc-cover{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px;padding:11px 14px;
+  background:var(--bg-soft);border:1px solid var(--border);border-radius:8px;font-size:.9em;}
+.icpc-progress{flex-basis:100%;display:flex;align-items:center;gap:10px;margin-top:6px;}
+.icpc-progress-bar{flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden;}
+.icpc-progress-fill{height:100%;width:0;background:linear-gradient(90deg,#3498db,#2ecc71);
+  border-radius:4px;transition:width .4s;}
+
 @media(max-width:720px){
   .topbar h1{font-size:1.15em;} .histo-label{width:78px;} .card{padding:18px;}
   .topnav a{padding:6px 9px;font-size:.82em;} .wall-label{width:90px;} .wall-num{width:96px;}
