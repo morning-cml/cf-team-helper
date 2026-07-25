@@ -18,10 +18,43 @@
   });
 })();
 
-/* ==================== 心跳 + 关闭即退出 ==================== */
-function beat() { fetch('/heartbeat').catch(() => {}); }
+/* ==================== 心跳 + 关闭即退出 ====================
+   浏览器会给后台标签页的定时器降频（Chrome 隐藏约 5 分钟后压到每分钟一次，
+   系统休眠时直接冻结），所以光靠 setInterval 不可靠：
+   - 服务端把兜底超时放宽到 5 分钟（见 config.HEARTBEAT_TIMEOUT）；
+   - 这里在标签页重新可见、以及用户有动作时补发心跳；
+   - 万一后台真的没了，直接把话说清楚，别让用户点了才发现"找不到"。 */
+let _beatFails = 0;
+
+function beat() {
+  fetch('/heartbeat')
+    .then(r => {
+      if (!r.ok) throw new Error('bad status');
+      _beatFails = 0;
+      const b = document.getElementById('deadBanner');
+      if (b) b.remove();                       // 后台又活了（比如用户重启了程序）
+    })
+    .catch(() => { if (++_beatFails >= 2) showDeadBanner(); });  // 连续两次才报，避开瞬时抖动
+}
+
+function showDeadBanner() {
+  if (document.getElementById('deadBanner')) return;
+  const d = document.createElement('div');
+  d.id = 'deadBanner';
+  d.className = 'dead-banner';
+  d.innerHTML = '⚠️ <b>后台程序已经退出</b>，本页上的操作不会生效。'
+    + '<span>重新启动 <code>cf辅助工具</code> 后刷新本页即可恢复。'
+    + '（页面长时间处于后台时，浏览器会把心跳降频，服务端可能因此判定页面已关闭）</span>';
+  document.body.appendChild(d);
+}
+
 beat();
 setInterval(beat, 5000);
+// 切回本标签页时立刻补一次：定时器被降频期间可能已经漏掉好几拍
+document.addEventListener('visibilitychange', () => { if (!document.hidden) beat(); });
+// 用户有动作时也补一次，成本可忽略（fetch 很轻），但能显著降低误杀概率
+['click', 'keydown'].forEach(ev =>
+  document.addEventListener(ev, () => { if (_beatFails) beat(); }, true));
 
 // 区分"真正关闭页面"与"应用内跳转"（查询/刷新会触发页面卸载，不能误杀进程）
 let _navigating = false;

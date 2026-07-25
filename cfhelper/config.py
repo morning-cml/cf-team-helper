@@ -4,7 +4,7 @@
 这里只放纯数据，不依赖 Flask / requests，方便单独测试与复用。
 """
 
-APP_VERSION = "2.15"
+APP_VERSION = "2.16"
 
 # ==================== CF API 端点 ====================
 CF_API_BASE      = "https://codeforces.com/api"
@@ -60,7 +60,14 @@ CACHE_EXPIRE_SECONDS = 3600          # 比赛列表缓存有效期
 UPCOMING_DAYS        = 30            # 未来比赛展示窗口（更新想法：看未来一个月）
 RECENT_DAYS          = 90            # 近况标签统计窗口
 HEATMAP_DAYS         = 365           # 刷题热力图回看天数（约一年）
-HEARTBEAT_TIMEOUT    = 30            # 心跳超时（秒）后自动退出进程
+# 心跳超时（秒）后自动退出进程。
+# 为什么是 5 分钟而不是 30 秒：浏览器会给后台标签页的定时器降频——Chrome 在标签隐藏
+# 约 5 分钟后启用 intensive throttling，把 setInterval 压到**每分钟一次**，系统休眠时
+# 更是完全冻结。心跳本身是 5 秒一次，降频后必然超过 30 秒，于是"页面明明开着，
+# 进程却自杀了"，用户再点任何东西都是"找不到"。
+# 放宽几乎没有代价：正常关页走的是 sendBeacon，2~4 秒就退出（见 SHUTDOWN_GRACE），
+# 这个超时只是信标失效（浏览器崩溃 / 被拦）时的兜底。
+HEARTBEAT_TIMEOUT    = 300
 SHUTDOWN_GRACE       = 2             # 收到 /shutdown 后的宽限秒数：留给应用内跳转的新页面来心跳
 
 # 训练计划薄弱/强项判定阈值（基于近况正确率）
