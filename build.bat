@@ -1,7 +1,7 @@
 ﻿@echo off
 chcp 65001 >nul
 echo ============================================
-echo   打包 CF 辅助工具 v2.14 为单文件 exe
+echo   打包 CF 辅助工具 v2.15 为单文件 exe
 echo ============================================
 
 REM 必须用原生 CPython（py 启动器）。PATH 上的 python 可能是 msys2 版，

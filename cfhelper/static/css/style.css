@@ -360,9 +360,11 @@ table.vs-stat td:nth-child(2){color:var(--muted);font-size:.92em;}
 .icpc-medal .mc{background:rgba(192,57,43,.16);color:#c0392b;}
 .icpc-medal .mg{background:rgba(212,160,23,.18);color:#a67c00;}
 .icpc-medal .ms{background:rgba(127,140,141,.20);color:#6b7778;}
+.icpc-medal .mb{background:rgba(160,106,58,.18);color:#96603a;}
 html[data-theme="dark"] .icpc-medal .mc{color:#ef8a7c;}
 html[data-theme="dark"] .icpc-medal .mg{color:#e8bf4d;}
 html[data-theme="dark"] .icpc-medal .ms{color:#b3bfc0;}
+html[data-theme="dark"] .icpc-medal .mb{color:#d19a6a;}
 .icpc-src{font-size:.74em;padding:1px 7px;border-radius:4px;background:var(--border);
   color:var(--muted);flex-shrink:0;margin-left:auto;}
 .icpc-prog{flex-shrink:0;font-size:.88em;min-width:104px;text-align:right;}

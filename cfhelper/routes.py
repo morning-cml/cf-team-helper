@@ -365,7 +365,7 @@ def register(app):
             team_max=config.TEAM_MAX_SIZE,
             fetch_state=icpc.problem_fetch_state(items),
             counts=icpc.problem_counts(items),      # 没做过的场次显示题目数，而不是一个空占位符
-            medals={c["id"]: icpc.contest_medals(c["id"]) for c in items},
+            medals={c["id"]: icpc.contest_medals(c["id"], c["tier"]) for c in items},
         )
 
     @app.route("/api/icpc/draw", methods=["POST"])

@@ -467,8 +467,11 @@ def test_icpc_pick_contest():
     assert info["total"] == 6 and picked is not None
 
 
-def test_icpc_medal_lines():
-    """奖牌线：只认赛场队伍、保底口径、以及各种退化情形。"""
+def test_icpc_medal_dist():
+    """榜单 -> 解题数分布：只认赛场队伍（ghost）。
+
+    存分布而非算好的奖牌线，是为了改奖牌比例时不用重拉 160 场榜单。
+    """
     from cfhelper import icpc
 
     def rows(dist, ghost=True):
@@ -477,27 +480,54 @@ def test_icpc_medal_lines():
             out += [{"points": solved, "party": {"ghost": ghost}}] * n
         return out
 
-    # 100 队；金线=前 10 名，银线=前 20 名。
-    # 解出 >=7 的 8 支 <= 10 -> 金报 7；>=6 的 18 支 <= 20 -> 银报 6；>=5 的 33 支 > 20 -> 5 不稳
-    m = icpc.medal_lines(rows({9: 2, 8: 3, 7: 3, 6: 10, 5: 15, 4: 30, 3: 37}))
-    assert m["teams"] == 100 and m["champion"] == 9
-    assert m["gold"] == 7
-    assert m["silver"] == 6, "5 题和 6 题都可能拿银时，应报保底的 6"
+    d = icpc.medal_dist(rows({9: 2, 5: 8}))
+    assert d["teams"] == 10 and d["dist"] == {"9": 2, "5": 8}
 
     # 练习者（非 ghost）不能参与计算——否则等于拿练习成绩定奖牌线
-    assert icpc.medal_lines(rows({12: 50}, ghost=False)) is None
-    mixed = rows({9: 2, 5: 8}) + rows({13: 99}, ghost=False)
-    assert icpc.medal_lines(mixed)["champion"] == 9, "榜首必须来自赛场队伍"
-    assert icpc.medal_lines(mixed)["teams"] == 10
+    assert icpc.medal_dist(rows({12: 50}, ghost=False)) is None
+    mixed = icpc.medal_dist(rows({9: 2, 5: 8}) + rows({13: 99}, ghost=False))
+    assert mixed["teams"] == 10 and "13" not in mixed["dist"]
+    assert icpc.medal_dist([]) is None
+
+
+def test_icpc_medal_lines():
+    """奖牌线：两套名次规则 + 保底口径 + 退化情形。"""
+    from cfhelper import icpc
+
+    def entry(dist):
+        return {"teams": sum(dist.values()), "dist": {str(k): v for k, v in dist.items()}}
+
+    # —— 一般赛事：前 10% 金 / 前 30% 银 / 前 60% 铜（累计口径）——
+    # 100 队 -> 金线 10 名、银线 30 名、铜线 60 名。累计人数：
+    #   >=7 共 8 支 <=10 -> 金 7
+    #   >=6 共 18 支 <=30 -> 银 6（>=5 有 33 支，超了 30，所以 5 不稳）
+    #   >=5 共 33 支 <=60 -> 铜 5（>=4 有 63 支，超了 60，所以 4 不稳）
+    m = icpc.medal_lines(entry({9: 2, 8: 3, 7: 3, 6: 10, 5: 15, 4: 30, 3: 37}), tier="regional")
+    assert m["teams"] == 100 and m["champion"] == 9 and m["wf"] is False
+    assert m["gold"] == 7
+    assert m["silver"] == 6, "5 题和 6 题都可能拿银时，应报保底的 6"
+    assert m["bronze"] == 5, "前 60% 是铜牌线（累计口径）"
+
+    # —— World Finals：固定名次，前 4 金 / 5-10 银 / 11-20 铜 ——
+    # 130 队。>=10 的 3 支 <=4 -> 金 10；>=9 的 9 支 <=10 -> 银 9；>=8 的 19 支 <=20 -> 铜 8
+    wf = entry({11: 1, 10: 2, 9: 6, 8: 10, 7: 20, 6: 40, 5: 51})
+    w = icpc.medal_lines(wf, tier="wf")
+    assert w["champion"] == 11 and w["wf"] is True
+    assert (w["gold"], w["silver"], w["bronze"]) == (10, 9, 8)
+    # 同一份数据按百分位算会完全不同 —— 证明两套规则确实分开了
+    r = icpc.medal_lines(wf, tier="regional")
+    assert (r["gold"], r["silver"], r["bronze"]) != (10, 9, 8)
 
     # 榜首并列：冠军取榜首实际题数（是事实，不是推算）
-    assert icpc.medal_lines(rows({11: 5, 10: 20, 9: 75}))["champion"] == 11
+    assert icpc.medal_lines(entry({11: 5, 10: 20, 9: 75}))["champion"] == 11
 
-    # 全员同分：没有任何题数能"稳"进前 10%，金银为 None，调用方需容忍
-    flat = icpc.medal_lines(rows({4: 50}))
-    assert flat["champion"] == 4 and flat["gold"] is None and flat["silver"] is None
+    # 全员同分：没有任何题数能"稳"进前 10%，金牌线为 None，调用方需容忍
+    flat = icpc.medal_lines(entry({4: 50}))
+    assert flat["champion"] == 4 and flat["gold"] is None
 
-    assert icpc.medal_lines([]) is None
+    # 旧格式缓存（只存了线、没存分布）应被视为待重抓
+    assert icpc.medal_lines({"teams": 9, "champion": 9, "gold": 7}) is None
+    assert icpc.medal_lines(None) is None and icpc.medal_lines({}) is None
 
 
 def test_cf_api_signature():

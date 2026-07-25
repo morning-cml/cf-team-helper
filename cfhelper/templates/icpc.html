@@ -122,8 +122,8 @@
       {% set m = medals.get(c.id) %}
       {% if m %}
       <span class="icpc-medal"
-            title="基于该场 {{ m.teams }} 支参赛队的真实成绩。&#10;冠军 = 榜首实际解出题数。&#10;金/银 = 按 ICPC 惯例的前 10% / 20% 名次估算，是「稳拿」所需题数（同题数还要比罚时，所以取保底值）。&#10;各赛区实际颁奖数每场单独定，此处为估算。">
-        <b class="mc">冠 {{ m.champion }}</b>{% if m.gold %}<b class="mg">金 {{ m.gold }}</b>{% endif %}{% if m.silver %}<b class="ms">银 {{ m.silver }}</b>{% endif %}
+            title="基于该场 {{ m.teams }} 支参赛队的真实成绩。&#10;冠军 = 榜首实际解出题数（事实）。&#10;{% if m.wf %}World Finals 按固定名次：前 4 名金、5-10 名银、11-20 名铜。{% else %}按名次百分位：前 10% 金、前 30% 银、前 60% 铜（累计口径，含更高一档）。{% endif %}&#10;金/银/铜是「稳拿」所需题数——同题数还要比罚时，所以取保底值。">
+        <b class="mc">冠 {{ m.champion }}</b>{% if m.gold %}<b class="mg">金 {{ m.gold }}</b>{% endif %}{% if m.silver %}<b class="ms">银 {{ m.silver }}</b>{% endif %}{% if m.bronze %}<b class="mb">铜 {{ m.bronze }}</b>{% endif %}
       </span>
       {% endif %}
       <span class="icpc-src">{{ 'Gym' if c.gym else '官方' }}</span>

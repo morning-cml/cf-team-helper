@@ -216,9 +216,14 @@ def _save_medals():
         atomic_write_json(config.ICPC_MEDALS_FILE, _medals, indent=None)
 
 
-def contest_medals(contest_id):
-    """该场的奖牌线；没抓过或拿不到赛场数据返回 None（空字典是"抓过但没有"的标记）。"""
-    return _load_medals().get(str(contest_id)) or None
+def contest_medals(contest_id, tier=None):
+    """该场的奖牌线；没抓过 / 拿不到赛场数据 / 缓存是旧格式，均返回 None。"""
+    return medal_lines(_load_medals().get(str(contest_id)), tier)
+
+
+def _medal_ready(entry):
+    """这条缓存是否已是可用的新格式（存了分布）。旧格式要重抓。"""
+    return bool(entry and "dist" in entry)
 
 
 def contest_problems(contest_id):
@@ -260,12 +265,13 @@ def problem_fetch_state(contests=None):
                 unavail += 1                     # 抓过，CF 明确不给
             else:
                 miss += 1
-            if medals.get(cid):
+            entry = medals.get(cid)
+            if _medal_ready(entry):
                 m_cov += 1
-            elif cid in medals:
+            elif entry == {}:
                 m_unavail += 1                   # 抓过，但这场没有赛场队伍
             else:
-                m_miss += 1
+                m_miss += 1                      # 没抓过，或缓存是旧格式需重抓
         st.update(covered=cov, missing=miss, unavailable=unavail,
                   medal_covered=m_cov, medal_missing=m_miss,
                   medal_unavailable=m_unavail, total_contests=len(contests))
@@ -308,9 +314,9 @@ def fetch_missing_data(contests, delay=None):
 
     def one_medal(c):
         rows = cf_api.get_standings_rows(c["id"], gym=c["gym"])
-        m = medal_lines(rows) if rows else None
-        _medals[str(c["id"])] = m or {}
-        return bool(m)
+        d = medal_dist(rows) if rows else None
+        _medals[str(c["id"])] = d or {}       # 空字典 = 抓过但这场没有赛场队伍
+        return bool(d)
 
     def worker():
         _fetch.update(running=True, error="")
@@ -321,7 +327,9 @@ def fetch_missing_data(contests, delay=None):
                       [c for c in contests if contest_problems(c["id"]) is None],
                       one_problem, _save_plist)
             run_phase("medals",
-                      [c for c in contests if str(c["id"]) not in _medals],
+                      [c for c in contests
+                       if not _medal_ready(_medals.get(str(c["id"])))
+                       and _medals.get(str(c["id"])) != {}],
                       one_medal, _save_medals)
         except Exception as e:                    # 网络异常不该让线程静默死掉
             _fetch["error"] = str(e)
@@ -396,14 +404,35 @@ def progress_stats(contests, progress):
     return [stats[t["key"]] for t in reversed(TIERS)]
 
 
-def medal_lines(rows):
-    """从榜单算出「解出几题能拿冠军 / 金 / 银 / 铜」。拿不到赛场数据返回 None。
+def medal_dist(rows):
+    """从榜单提取真实赛场队伍的**解题数分布**。拿不到赛场数据返回 None。
 
     只认 ghost 队伍
     ---------------
     CF Gym 榜单里绝大多数是赛后练习的人，真实赛场队伍是以 ghost 身份导入的
     （注意它们的 participantType 是 VIRTUAL 而非 CONTESTANT，按类型筛会一支都取不到）。
     把练习者算进去等于拿练习成绩定奖牌线，必须只取 ghost。
+
+    这里只存分布不存算好的奖牌线：奖牌比例是可能调整的，存了分布就能就地重算，
+    不必为了改个比例重新拉 160 场榜单。
+    """
+    solves = [int(r.get("points") or 0) for r in rows
+              if (r.get("party") or {}).get("ghost")]
+    if not solves:
+        return None
+    dist = Counter(solves)
+    return {"teams": len(solves),
+            "dist": {str(k): v for k, v in sorted(dist.items(), reverse=True)}}
+
+
+def medal_lines(entry, tier=None):
+    """由解题数分布算出「解出几题能拿冠军 / 金 / 银 / 铜」。
+
+    两套名次规则
+    ------------
+    - **World Finals**：固定名次，前 4 金、5-10 银、11-20 铜；
+    - **其余赛事**：名次百分位，前 10% 金、前 30% 银、前 60% 铜。
+    两者都是**累计**口径——"前 30%"指银牌及以上，含金牌区。
 
     「保底题数」口径
     ---------------
@@ -412,29 +441,30 @@ def medal_lines(rows):
     这正好实现了"5 题和 6 题都可能拿银时，报 6"——5 题不稳，6 题才稳。
 
     冠军直接取榜首实际解出的题数（那是事实，不是推算）。
-
-    注意：金银铜线是按名次百分位**估算**的（CF 没有奖牌信息），
-    各赛区实际颁奖数每场单独定，调用方须在界面上标注清楚。
     """
-    solves = sorted((int(r.get("points") or 0) for r in rows
-                     if (r.get("party") or {}).get("ghost")), reverse=True)
-    if not solves:
+    if not entry or "dist" not in entry:
+        return None                        # 旧格式（只存了线、没存分布）视为待重抓
+    dist = {int(k): v for k, v in entry["dist"].items()}
+    if not dist:
         return None
-    n = len(solves)
+    n, top = entry["teams"], max(dist)
+
+    limits = (dict(config.ICPC_MEDAL_WF_RANKS) if tier == "wf"
+              else {k: max(1, int(n * p / 100)) for k, p in config.ICPC_MEDAL_PCT.items()})
 
     def guaranteed(rank_limit):
         """能稳进前 rank_limit 名所需的最少题数。"""
         ans = None
-        for s in range(solves[0], 0, -1):
-            if sum(1 for x in solves if x >= s) <= rank_limit:
+        for s in range(top, 0, -1):
+            if sum(v for k, v in dist.items() if k >= s) <= rank_limit:
                 ans = s
             else:
                 break                       # 再往下只会更多队伍达标，不必继续
         return ans
 
-    out = {"teams": n, "champion": solves[0]}
-    for key, pct in config.ICPC_MEDAL_PCT.items():
-        out[key] = guaranteed(max(1, int(n * pct / 100)))
+    out = {"teams": n, "champion": top, "wf": tier == "wf"}
+    for key in ("gold", "silver", "bronze"):
+        out[key] = guaranteed(limits[key])
     return out
 
 
