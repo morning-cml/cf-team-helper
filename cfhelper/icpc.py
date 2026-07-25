@@ -20,6 +20,7 @@ CF 的 gym 里混着大量同样带 ICPC 关键词、但并不属于竞赛阶梯
 3. EC-Final       —— ICPC 亚洲东部大陆决赛
 4. World Finals   —— ICPC 全球总决赛
 """
+import random
 import re
 import threading
 import time
@@ -343,6 +344,61 @@ def progress_stats(contests, progress):
             s["touched"] += 1
             s["solved"] += p["count"]
     return [stats[t["key"]] for t in reversed(TIERS)]
+
+
+def blank_progress(contest):
+    """给"一题没做过"的比赛造一份空进度，好让页面照样能列出题目网格。
+
+    merge_progress 只收录有做题记录的场次，但抽取时抽中的多半正是没碰过的——
+    没有这份兜底，最常见的情况反而看不到题目列表。
+    """
+    probs = contest_problems(contest["id"])
+    if not probs:
+        return None
+    base = "gym" if contest["gym"] else "contest"
+    return {
+        "solved": [], "count": 0, "tried": 0, "total": len(probs), "pct": 0,
+        "by_handle": {}, "known": True,
+        "problems": [{**p, "state": "none", "who": [],
+                      "url": f"https://codeforces.com/{base}/{contest['id']}/problem/{p['i']}"}
+                     for p in probs],
+    }
+
+
+def pick_contest(contests, progress, tier=None, skip_rate=None, rng=None):
+    """在某一档里抽一场没吃透的比赛来练。返回 (选中的比赛 or None, 统计信息)。
+
+    规则（按用户要求）：
+    - **完全没解出过题的场次优先**：只要该档还有这样的场次，就只从它们里面抽；
+    - 若该档每场都解出过题，则剩下的一视同仁，等概率抽；
+    - **解出比例 > skip_rate 的场次直接排除**——已经吃得差不多了，再练收益低。
+
+    两处边界的取舍：
+    - "交过但一题没解出"仍算**没做过**：那场对你依然是完整的练习量；
+    - 题单未知的场次（CF 不开放榜单）算不出比例，**不能证明超线**，故保留在池子里。
+    """
+    rng = rng or random
+    skip = config.ICPC_PICK_SKIP_RATE if skip_rate is None else skip_rate
+    pool = [c for c in contests if not tier or c["tier"] == tier]
+
+    fresh, partial, mastered = [], [], []
+    for c in pool:
+        p = progress.get(c["id"])
+        if not p or not p["count"]:
+            fresh.append(c)                      # 一题没解出 = 完全没做过
+        elif p["pct"] is not None and p["pct"] > skip:
+            mastered.append(c)                   # 已吃透，排除
+        else:
+            partial.append(c)
+
+    source = "fresh" if fresh else "partial"
+    candidates = fresh or partial
+    info = {"tier": tier, "total": len(pool), "fresh": len(fresh),
+            "partial": len(partial), "mastered": len(mastered),
+            "source": source, "pool": len(candidates), "skip_rate": skip}
+    if not candidates:
+        return None, info
+    return rng.choice(candidates), info
 
 
 def solved_by_contest(submissions):

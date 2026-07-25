@@ -409,6 +409,64 @@ def test_icpc_progress_merge():
         cf_api.PROBLEMS[:] = saved
 
 
+def test_icpc_pick_contest():
+    """抽取比赛的三条规则：没解出过的优先、超线的排除、都做过则一视同仁。"""
+    from cfhelper import icpc
+
+    def ct(cid, tier="regional"):
+        return {"id": cid, "name": f"C{cid}", "tier": tier, "gym": True,
+                "year": 2024, "start_ts": 0, "url": ""}
+
+    def pg(count, total, pct):
+        return {"solved": [], "count": count, "tried": 0, "total": total,
+                "pct": pct, "by_handle": {}, "problems": [], "known": True}
+
+    contests = [ct(1), ct(2), ct(3), ct(4), ct(5), ct(9, "wf")]
+
+    # 1) 有"一题没解出"的场次时，只从它们里面抽（1、2 没有进度记录 -> fresh）
+    prog = {3: pg(2, 10, 20), 4: pg(9, 10, 90), 5: pg(6, 10, 60)}
+    for _ in range(30):
+        picked, info = icpc.pick_contest(contests, prog, tier="regional")
+        assert picked["id"] in (1, 2), f"应只从没解出过的里抽，实得 {picked['id']}"
+    assert info["source"] == "fresh" and info["fresh"] == 2
+    assert info["mastered"] == 1                    # 只有 90% 的那场被排除
+    assert info["total"] == 5                       # wf 那场不在本档
+
+    # 2) 恰好 60% 不算超线（要求是"超过 60%"），90% 才排除
+    prog_all = {1: pg(1, 10, 10), 2: pg(1, 10, 10), 3: pg(2, 10, 20),
+                4: pg(9, 10, 90), 5: pg(6, 10, 60)}
+    ids = {icpc.pick_contest(contests, prog_all, "regional")[0]["id"] for _ in range(60)}
+    assert 5 in ids, "恰好 60% 不该被排除"
+    assert 4 not in ids, "90% 应被排除"
+
+    # 3) 全都做过时一视同仁，源标记为 partial
+    _, info = icpc.pick_contest(contests, prog_all, "regional")
+    assert info["source"] == "partial" and info["fresh"] == 0 and info["partial"] == 4
+
+    # 4) 交过但一题没解出 -> 仍算没做过
+    prog_tried = {1: {"solved": [], "count": 0, "tried": 3, "total": 10, "pct": 0,
+                      "by_handle": {}, "problems": [], "known": True}}
+    picked, info = icpc.pick_contest(contests, prog_tried, "regional")
+    assert info["fresh"] == 5 and picked["id"] in (1, 2, 3, 4, 5)
+
+    # 5) 题单未知（pct=None）算不出比例，不能证明超线 -> 保留
+    prog_unknown = {1: pg(1, 10, 10), 2: pg(1, 10, 10), 3: pg(2, 10, 20),
+                    4: pg(9, 10, 90),
+                    5: {"solved": [], "count": 8, "tried": 0, "total": None,
+                        "pct": None, "by_handle": {}, "problems": [], "known": False}}
+    ids = {icpc.pick_contest(contests, prog_unknown, "regional")[0]["id"] for _ in range(60)}
+    assert 5 in ids, "题单未知的场次不该被当成已吃透而排除"
+
+    # 6) 整档都超线 -> 抽不出来，返回 None 而不是报错
+    all_done = {i: pg(9, 10, 90) for i in (1, 2, 3, 4, 5)}
+    picked, info = icpc.pick_contest(contests, all_done, "regional")
+    assert picked is None and info["mastered"] == 5 and info["pool"] == 0
+
+    # 7) 不限档位时跨档抽取
+    picked, info = icpc.pick_contest(contests, {}, tier=None)
+    assert info["total"] == 6 and picked is not None
+
+
 def test_cf_api_signature():
     """CF 签名算法：apiSig = <rand> + sha512(<rand>/<method>?<字典序参数>#<secret>)。
 

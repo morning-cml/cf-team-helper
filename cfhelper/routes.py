@@ -329,6 +329,22 @@ def register(app):
                                army=army.load_army())
 
     # ==================== ICPC 比赛库 ====================
+    def _icpc_progress(raw_handles, items):
+        """按用户名串取多人做题进度。返回 (progress, 失败的用户名)。
+
+        页面渲染与「抽取比赛」接口共用，避免两处各写一遍口径不一致。
+        """
+        errors = []
+        hlist = [x.strip() for x in raw_handles.replace("，", ",").split(",") if x.strip()]
+        hlist = hlist[:config.TEAM_MAX_SIZE]
+        errors += [h for h in hlist if not cf_api.is_valid_handle(h)]
+        hlist = [h for h in hlist if cf_api.is_valid_handle(h)]
+        members = []
+        for h, subs in _parallel_map(lambda h: (h, cf_api.get_submissions(h)), hlist):
+            (members.append((h, icpc.solved_by_contest(subs)))
+             if subs is not None else errors.append(h))
+        return (icpc.merge_progress(items, members) if members else {}), errors
+
     @app.route("/icpc", methods=["GET", "POST"])
     def icpc_page():
         _touch()
@@ -336,20 +352,9 @@ def register(app):
         errors, prefill, progress, stats = [], "", {}, None
 
         if request.method == "POST":
-            handles = request.form.get("handles", "").replace("，", ",").strip()
-            prefill = handles
-            hlist = [x.strip() for x in handles.split(",") if x.strip()][:config.TEAM_MAX_SIZE]
-            errors += [h for h in hlist if not cf_api.is_valid_handle(h)]
-            hlist = [h for h in hlist if cf_api.is_valid_handle(h)]
-            fetched = _parallel_map(lambda h: (h, cf_api.get_submissions(h)), hlist)
-            members = []
-            for h, subs in fetched:
-                if subs is None:
-                    errors.append(h)
-                else:
-                    members.append((h, icpc.solved_by_contest(subs)))
-            if members:
-                progress = icpc.merge_progress(items, members)
+            prefill = request.form.get("handles", "").replace("，", ",").strip()
+            progress, errors = _icpc_progress(prefill, items)
+            if progress:
                 stats = icpc.progress_stats(items, progress)
 
         years = sorted({c["year"] for c in items if c["year"]}, reverse=True)
@@ -360,6 +365,28 @@ def register(app):
             team_max=config.TEAM_MAX_SIZE,
             fetch_state=icpc.problem_fetch_state(items),
         )
+
+    @app.route("/api/icpc/draw", methods=["POST"])
+    def api_icpc_draw():
+        """在某一档里抽一场没吃透的比赛。没吃透的定义见 icpc.pick_contest。"""
+        items = icpc.get_contests()
+        tier = request.args.get("tier", "").strip() or None
+        if tier and tier not in icpc.TIER_BY_KEY:
+            return jsonify({"success": False, "msg": "档位不存在"})
+        progress, errors = _icpc_progress(request.args.get("handles", ""), items)
+        picked, info = icpc.pick_contest(items, progress, tier)
+        if not picked:
+            return jsonify({"success": False, "info": info, "errors": errors,
+                            "msg": f"这一档 {info['total']} 场你都已经做过 "
+                                   f"{info['skip_rate']}% 以上了，换个档位吧 🎉"})
+        # 抽中的多半是没碰过的场次，merge_progress 里没有它；用空进度兜底，
+        # 好让页面照样列出题目网格（全灰、可点进去）
+        detail = progress.get(picked["id"]) or icpc.blank_progress(picked)
+        return jsonify({"success": True, "info": info, "errors": errors,
+                        "contest": {**picked,
+                                    "tier_name": icpc.TIER_BY_KEY[picked["tier"]]["name"],
+                                    "tier_cls":  icpc.TIER_BY_KEY[picked["tier"]]["cls"]},
+                        "progress": detail})
 
     @app.route("/api/icpc/fetch_problems", methods=["POST"])
     def api_icpc_fetch():

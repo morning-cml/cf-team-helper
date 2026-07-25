@@ -63,6 +63,22 @@
 </div>
 {% endif %}
 
+<!-- ==================== 抽取比赛 ==================== -->
+<div class="card">
+  <h3>🎲 抽一场来练</h3>
+  <p class="muted">选一个档位随机抽一场。<strong>完全没解出过题的场次优先</strong>——只要该档还有这样的场次，
+    就只从它们里面抽；都做过了则一视同仁。<strong>已解出超过 60% 的场次不会被抽到</strong>（练它收益太低）。</p>
+  <div class="filter-row" style="margin-top:10px;">
+    <select id="drawTier">
+      {% for t in tiers %}<option value="{{ t.key }}">{{ t.name }}</option>{% endfor %}
+      <option value="">全部档位</option>
+    </select>
+    <button class="btn-primary" onclick="icpcDraw(this)">🎲 抽取</button>
+    {% if not prefill %}<span class="muted" style="align-self:center;">※ 没填用户名时视为全部没做过，等同纯随机</span>{% endif %}
+  </div>
+  <div id="drawResult"></div>
+</div>
+
 <div class="card">
   <div class="filter-row" id="icpcTierFilter">
     <span class="chip active" data-tier="all">全部档位</span>

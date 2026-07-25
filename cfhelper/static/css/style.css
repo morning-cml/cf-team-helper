@@ -331,6 +331,15 @@ table.vs-stat td:nth-child(2){color:var(--muted);font-size:.92em;}
 .icpc-bar{flex-basis:100%;height:4px;background:var(--border);border-radius:2px;
   margin:5px 0 0 54px;max-width:calc(100% - 54px);overflow:hidden;}
 .icpc-bar i{display:block;height:100%;background:linear-gradient(90deg,#3498db,#2ecc71);border-radius:2px;}
+/* 抽取结果 */
+.draw-card{margin-top:14px;padding:16px 18px;background:var(--bg-soft);border:1px solid var(--border);
+  border-left:5px solid var(--primary);border-radius:10px;animation:slidein .25s;}
+.draw-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:.85em;margin-bottom:8px;}
+.draw-name{display:block;font-size:1.15em;font-weight:700;line-height:1.4;}
+.draw-done{margin-top:6px;font-size:.92em;color:var(--muted);}
+.draw-done b{color:var(--success);}
+.draw-empty{margin-top:14px;padding:16px 18px;background:rgba(46,204,113,.1);
+  border:1px solid var(--success);color:var(--success);border-radius:10px;font-weight:600;}
 .icpc-cover{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px;padding:11px 14px;
   background:var(--bg-soft);border:1px solid var(--border);border-radius:8px;font-size:.9em;}
 .icpc-progress{flex-basis:100%;display:flex;align-items:center;gap:10px;margin-top:6px;}

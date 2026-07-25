@@ -4,7 +4,7 @@
 这里只放纯数据，不依赖 Flask / requests，方便单独测试与复用。
 """
 
-APP_VERSION = "2.9"
+APP_VERSION = "2.10"
 
 # ==================== CF API 端点 ====================
 CF_API_BASE      = "https://codeforces.com/api"
@@ -35,6 +35,8 @@ ICPC_PROBLEMS_FILE   = "cf_icpc_problems.json"   # 各场比赛的题号列表�
 API_KEY_FILE         = "cf_api.json"             # 可选的 CF API 密钥（访问 Gym 题单用）
 # 抓题单时每场之间的间隔秒数。实测串行连打 1.47s/场不触发限流，留一点余量更稳。
 ICPC_FETCH_DELAY     = 0.3
+# 抽取比赛时的「已吃透」线：解出比例高于此值的场次不再被抽到（练它的边际收益太低）。
+ICPC_PICK_SKIP_RATE  = 60
 ARMY_FILE            = "cf_army.json"
 TODO_FILE            = "cf_todo.json"           # 题单/待做收藏（跨会话保留）
 CACHE_EXPIRE_SECONDS = 3600          # 比赛列表缓存有效期

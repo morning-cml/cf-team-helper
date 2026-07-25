@@ -32,6 +32,64 @@ function icpcFilter() {
   if (label) label.textContent = `当前显示 ${shown} 场`;
 }
 
+/* ==================== 抽一场来练 ==================== */
+function icpcEsc(s) {
+  return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+function icpcDraw(btn) {
+  const tier = document.getElementById('drawTier').value;
+  const input = document.getElementById('icpcInput');
+  const params = new URLSearchParams({ tier, handles: input ? input.value : '' });
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 抽取中…'; }
+  fetch('/api/icpc/draw?' + params.toString(), { method: 'POST' })
+    .then(r => r.json())
+    .then(d => icpcRenderDraw(d))
+    .catch(() => toast('抽取失败', 'err'))
+    .finally(() => { if (btn) { btn.disabled = false; btn.textContent = '🎲 抽取'; } });
+}
+
+function icpcRenderDraw(d) {
+  const box = document.getElementById('drawResult');
+  const i = d.info || {};
+  if (!d.success) {
+    box.innerHTML = `<div class="draw-empty">${icpcEsc(d.msg || '没有可抽的比赛')}</div>`;
+    return;
+  }
+  const c = d.contest, p = d.progress;
+  // 说明这次是从哪个池子里抽的，避免"为什么老抽到做过的"之类的困惑
+  const from = i.source === 'fresh'
+    ? `从 <b>${i.fresh}</b> 场一题都没解出的比赛中抽取`
+    : `该档每场都解出过题，从 <b>${i.partial}</b> 场未超 ${i.skip_rate}% 的比赛中抽取`;
+  const skipped = i.mastered ? ` · 已排除 ${i.mastered} 场解出超 ${i.skip_rate}% 的` : '';
+
+  let grid = '';
+  if (p && p.problems) {
+    grid = '<div class="icpc-probs" style="padding-left:0;margin-top:8px;">'
+      + p.problems.map(q => `<a class="pq pq-${q.state}" href="${q.url}" target="_blank"`
+        + ` title="${icpcEsc(q.i + '. ' + (q.n || '（题名未知）'))}">${icpcEsc(q.i)}</a>`).join('')
+      + '</div>';
+  }
+  let done;
+  if (!p) done = '<b>还没碰过这场</b>（题单未知）';
+  else if (!p.count) done = `<b>全新的一场</b>${p.total ? ` · 共 ${p.total} 题` : ''}`;
+  else if (p.total) done = `已解出 <b>${p.count}/${p.total}</b>（${p.pct}%）`;
+  else done = `已解出 <b>${p.count}</b> 题`;
+
+  box.innerHTML = `
+    <div class="draw-card">
+      <div class="draw-meta">
+        <span class="tier-badge ${c.tier_cls}">${icpcEsc(c.tier_name)}</span>
+        <span class="muted">${c.year || ''} · ${c.gym ? 'Gym' : '官方'}</span>
+        <span class="muted">${from}${skipped}</span>
+      </div>
+      <a class="draw-name" href="${c.url}" target="_blank">${icpcEsc(c.name)}</a>
+      <div class="draw-done">${done}</div>
+      ${grid}
+    </div>`;
+  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
 /* ==================== 题单抓取：后台跑，前端轮询进度 ==================== */
 function icpcPollFetch() {
   fetch('/api/icpc/fetch_state')
