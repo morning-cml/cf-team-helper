@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}刷题器 | CF 团队助手{% endblock %}
+
+{% block body %}
+<div class="card">
+  <h2>🎲 刷题器 · 按条件从全站题库出题</h2>
+  <p class="muted">在所有带 rating 的 CF 题里，按「难度区间 + 标签 + 排除某人已做过」随机或顺序出题。赛前热手、专项突破、给队友配题都好用。</p>
+
+  <div class="picker-form">
+    <div class="picker-field">
+      <label>难度区间</label>
+      <div class="picker-range">
+        <input type="number" id="pkMin" value="800" min="0" max="3500" step="100"> ~
+        <input type="number" id="pkMax" value="1600" min="0" max="3500" step="100">
+      </div>
+    </div>
+    <div class="picker-field">
+      <label>排除某人已做过（可空）</label>
+      <input type="text" id="pkExclude" placeholder="如 tourist，留空不排除">
+    </div>
+    <div class="picker-field">
+      <label>出题数量</label>
+      <input type="number" id="pkCount" value="{{ default_count }}" min="1" max="50">
+    </div>
+    <div class="picker-field">
+      <label>排序</label>
+      <select id="pkMode">
+        <option value="random">随机抽取</option>
+        <option value="sorted">按难度升序</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="picker-field" style="margin-top:14px;">
+    <label>标签（点选可多选，命中任一即可；不选 = 全部）
+      <button class="btn-ghost" style="padding:3px 10px;font-size:.78em;" onclick="pkClearTags()">清空</button></label>
+    <div class="tag-pick" id="pkTags">
+      {% for t in tags %}<span class="chip" data-tag="{{ t }}">{{ t }}</span>{% endfor %}
+    </div>
+  </div>
+
+  <div style="margin-top:16px;">
+    <button class="btn-primary" id="pkGo" onclick="pkGenerate(this)">🎲 出题</button>
+  </div>
+</div>
+
+<div class="card" id="pkResultCard" style="display:none;">
+  <h3 id="pkResultTitle">结果</h3>
+  <div class="reco-grid" id="pkResult"></div>
+</div>
+
+<div class="card">
+  <h3>📚 题型 / 模板资源</h3>
+  <div class="reco-grid">
+    <a class="reco-card" href="https://cp-algorithms.com/" target="_blank"><span class="reco-name">cp-algorithms</span><br><span class="muted">经典算法讲解 + 模板</span></a>
+    <a class="reco-card" href="https://codeforces.com/edu/courses" target="_blank"><span class="reco-name">CF EDU</span><br><span class="muted">官方专项课程（含 ITMO）</span></a>
+    <a class="reco-card" href="https://earthshakira.github.io/a2oj-clientside/server/Ladders.html" target="_blank"><span class="reco-name">A2OJ Ladders</span><br><span class="muted">按难度的题单阶梯</span></a>
+    <a class="reco-card" href="https://usaco.guide/" target="_blank"><span class="reco-name">USACO Guide</span><br><span class="muted">分级专题 + 题单</span></a>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}<script src="{{ url_for('static', filename='js/picker.js') }}"></script>{% endblock %}

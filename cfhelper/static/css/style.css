@@ -1,0 +1,300 @@
+/* ==================== 主题变量 ==================== */
+:root{
+  --bg:#f5f7fa; --bg-elev:#ffffff; --bg-soft:#f8f9fa;
+  --text:#2c3e50; --text-2:#333; --muted:#6c757d;
+  --border:#e8ecef; --primary:#3498db; --primary-d:#2980b9;
+  --success:#2ecc71; --success-d:#27ae60; --danger:#e74c3c; --warn:#f39c12;
+  --shadow:0 2px 12px rgba(0,0,0,.06); --shadow-l:0 4px 18px rgba(0,0,0,.10);
+  --radius:12px;
+}
+html[data-theme="dark"]{
+  --bg:#0e1420; --bg-elev:#161f2e; --bg-soft:#1d2838;
+  --text:#e6edf3; --text-2:#cbd5e1; --muted:#8b98a5;
+  --border:#26303f; --primary:#4aa3e8; --primary-d:#3a8fd4;
+  --shadow:0 2px 12px rgba(0,0,0,.35); --shadow-l:0 6px 22px rgba(0,0,0,.45);
+}
+
+*{box-sizing:border-box;}
+body{max-width:1600px;margin:0 auto;padding:0 22px 60px;
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Microsoft YaHei',Arial,sans-serif;
+  background:var(--bg);color:var(--text-2);transition:background .25s,color .25s;}
+h1,h2,h3,h4{color:var(--text);margin:.2em 0 .6em;}
+a{color:var(--primary);text-decoration:none;}
+a:hover{text-decoration:underline;}
+
+/* ==================== 顶栏 ==================== */
+.topbar{position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:14px;
+  padding:14px 4px;margin-bottom:22px;background:var(--bg);
+  border-bottom:2px solid var(--primary);backdrop-filter:blur(6px);}
+.topbar h1{font-size:1.5em;margin:0;border:none;flex:1;}
+.topbar .ver{font-size:.5em;color:var(--muted);font-weight:400;margin-left:6px;}
+.icon-btn{background:var(--bg-soft);border:1px solid var(--border);color:var(--text);
+  width:42px;height:42px;border-radius:50%;cursor:pointer;font-size:1.15em;transition:.2s;}
+.icon-btn:hover{transform:translateY(-2px);box-shadow:var(--shadow);}
+
+/* ==================== 通用卡片/按钮 ==================== */
+.card{background:var(--bg-elev);border-radius:var(--radius);padding:24px;margin-bottom:22px;
+  box-shadow:var(--shadow);border:1px solid var(--border);}
+.card h2{font-size:1.45em;border-bottom:1px solid var(--border);padding-bottom:10px;}
+.card h3{font-size:1.2em;}
+button{padding:11px 22px;border:none;border-radius:9px;font-size:.97em;font-weight:600;
+  cursor:pointer;transition:.18s;font-family:inherit;}
+.btn-primary{background:var(--primary);color:#fff;}
+.btn-primary:hover{background:var(--primary-d);}
+.btn-success{background:var(--success);color:#fff;}
+.btn-success:hover{background:var(--success-d);}
+.btn-ghost{background:var(--bg-soft);color:var(--text);border:1px solid var(--border);}
+.btn-ghost:hover{background:var(--border);}
+.muted{color:var(--muted);}
+.up{color:var(--success);font-weight:600;}
+.down{color:var(--danger);font-weight:600;}
+
+/* ==================== 大部队 ==================== */
+.army-section{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;padding:24px;
+  border-radius:var(--radius);margin-bottom:22px;box-shadow:0 6px 20px rgba(102,126,234,.35);}
+.army-section h2{color:#fff;border:none;display:flex;align-items:center;gap:12px;}
+.army-head-btn{margin-left:auto;background:rgba(255,255,255,.2);color:#fff;
+  border:1px solid rgba(255,255,255,.35);padding:8px 14px;font-size:.85em;}
+.army-head-btn:hover{background:rgba(255,255,255,.32);}
+.army-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;margin-top:18px;}
+.army-card{background:rgba(255,255,255,.14);backdrop-filter:blur(8px);border-radius:10px;
+  padding:16px 18px;border-left:4px solid #fff;transition:transform .2s;}
+.army-card:hover{transform:translateY(-3px);}
+.army-handle{font-size:1.2em;font-weight:700;margin-bottom:6px;word-break:break-all;}
+.army-info{font-size:.9em;line-height:1.85;margin-bottom:12px;opacity:.96;}
+.army-btn-group{display:flex;gap:8px;}
+.army-btn{flex:1;padding:7px 8px;border-radius:6px;font-size:.84em;}
+.army-btn-detail{background:rgba(255,255,255,.9);color:#2c3e50;}
+.army-btn-remove{background:rgba(231,76,60,.9);color:#fff;}
+
+/* ==================== 比赛日历 ==================== */
+.contest-calendar{border:2px solid var(--success);}
+.filter-row{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 14px;}
+.chip{padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:var(--bg-soft);
+  color:var(--text);cursor:pointer;font-size:.85em;font-weight:600;transition:.15s;}
+.chip.active{background:var(--primary);color:#fff;border-color:var(--primary);}
+.contest-item{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:13px 15px;
+  margin:9px 0;background:var(--bg-soft);border-radius:9px;border:1px solid var(--border);flex-wrap:wrap;}
+.contest-item.dimmed{display:none;}
+.contest-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.contest-level{display:inline-block;padding:3px 10px;border-radius:5px;color:#fff;font-size:.8em;font-weight:700;}
+.fit-badge{background:var(--warn);color:#fff;padding:2px 8px;border-radius:5px;font-size:.75em;font-weight:700;}
+.lv-Div4{background:#95a5a6;}.lv-Div3{background:#2ecc71;}.lv-Div2{background:#3498db;}
+.lv-Div1{background:#e74c3c;}.lv-Div1Div2{background:#8e44ad;}.lv-Educational{background:#16a085;}
+.lv-Global{background:#e67e22;}.lv-other{background:#7f8c8d;}
+
+/* ==================== 搜索框 ==================== */
+.search-box{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+input[type=text]{flex:1;min-width:260px;padding:12px 16px;border:2px solid var(--border);
+  border-radius:9px;font-size:1em;background:var(--bg-elev);color:var(--text);transition:.2s;}
+input[type=text]:focus{outline:none;border-color:var(--primary);}
+select{padding:12px 14px;border:2px solid var(--border);border-radius:9px;font-size:1em;
+  background:var(--bg-elev);color:var(--text);}
+
+/* ==================== 表格 ==================== */
+.table-wrap{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;margin-top:14px;}
+th,td{padding:12px 10px;text-align:center;border-bottom:1px solid var(--border);}
+th{background:var(--bg-soft);color:var(--text);font-weight:600;position:sticky;top:0;}
+tbody tr:hover{background:var(--bg-soft);}
+.gold{background:rgba(255,215,0,.10);}.silver{background:rgba(192,192,192,.12);}
+.bronze{background:rgba(205,127,50,.12);}
+
+/* ==================== 等级颜色 ==================== */
+.newbie{color:#808080;}.pupil{color:#008000;}.specialist{color:#03a89e;}
+.expert{color:#3b6ef0;}.candidate-master{color:#c44ec4;}.master{color:#ff8c00;}
+.international-master{color:#ff8c00;}.grandmaster{color:#ff3030;}
+.international-grandmaster{color:#ff2020;}
+.legendary-grandmaster{color:#ff0000;background:rgba(0,0,0,.06);padding:0 4px;border-radius:3px;}
+
+/* ==================== 进度条 ==================== */
+.progress-bar{width:100%;height:26px;background:var(--bg-soft);border-radius:13px;margin:16px 0;overflow:hidden;border:1px solid var(--border);}
+.progress-fill{height:100%;border-radius:13px;background:linear-gradient(90deg,#3498db,#2ecc71);
+  display:flex;align-items:center;justify-content:center;color:#fff;font-weight:600;min-width:38px;transition:width 1s;}
+
+/* ==================== 训练区 / 标签 ==================== */
+.training-zone{border-radius:9px;padding:15px 18px;margin:13px 0;border-left:4px solid;background:var(--bg-soft);}
+.zone-comfort{border-color:var(--success);}.zone-improve{border-color:var(--warn);}.zone-challenge{border-color:var(--danger);}
+.diff-tag{display:inline-block;padding:3px 9px;border-radius:5px;margin:2px;font-size:.82em;font-weight:600;}
+.d-intro{background:#e9ecef;color:#555;}.d-easy1{background:#d4edda;color:#155724;}
+.d-easy2{background:#b8dfc4;color:#0d3d1f;}.d-med1{background:#fff3cd;color:#856404;}
+.d-med2{background:#ffd966;color:#5a4000;}.d-hard1{background:#fde2c8;color:#7d3c00;}
+.d-hard2{background:#f8c8a0;color:#6b2800;}.d-exp2{background:#f5c6cb;color:#721c24;}
+.d-gm{background:#e8a0b0;color:#5a0020;}.d-master{background:#d070a0;color:#fff;}
+.d-legend{background:#222;color:#ffd700;}.d-unknown{background:#eee;color:#999;}
+.chiptag{display:inline-block;background:var(--bg-soft);border:1px solid var(--border);
+  padding:3px 8px;border-radius:5px;margin:2px;font-size:.82em;}
+
+.tag-card{display:inline-block;padding:9px 13px;border-radius:8px;margin:5px;background:var(--bg-soft);
+  border:1px solid var(--border);font-size:.9em;line-height:1.6;vertical-align:top;}
+.tag-high{border-color:var(--success);background:rgba(46,204,113,.12);}
+.tag-low{border-color:var(--danger);background:rgba(231,76,60,.12);}
+
+/* ==================== 难度直方图 ==================== */
+.histo{display:flex;flex-direction:column;gap:7px;margin-top:12px;}
+.histo-row{display:flex;align-items:center;gap:10px;}
+.histo-label{width:120px;text-align:right;font-size:.85em;flex-shrink:0;}
+.histo-track{flex:1;background:var(--bg-soft);border-radius:6px;overflow:hidden;height:22px;border:1px solid var(--border);}
+.histo-fill{height:100%;border-radius:6px;display:flex;align-items:center;padding-left:8px;color:#fff;font-size:.78em;font-weight:700;min-width:24px;}
+.histo-count{width:42px;font-size:.85em;color:var(--muted);}
+
+/* ==================== 推荐题目 ==================== */
+.reco-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-top:12px;}
+.reco-card{background:var(--bg-soft);border:1px solid var(--border);border-left:4px solid var(--primary);
+  border-radius:8px;padding:12px 14px;transition:.15s;}
+.reco-card:hover{box-shadow:var(--shadow);transform:translateY(-2px);}
+.reco-name{font-weight:600;display:block;margin-bottom:5px;}
+.reco-rating{display:inline-block;background:var(--primary);color:#fff;padding:1px 8px;border-radius:10px;font-size:.78em;font-weight:700;}
+
+/* ==================== Rating 走势图 ==================== */
+.rating-chart{width:100%;margin-top:6px;}
+.rc-svg{width:100%;height:auto;display:block;overflow:visible;}
+.rc-area{fill:url(#rcGrad);stroke:none;}
+.rc-line{fill:none;stroke:var(--text);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round;}
+.rc-grid{stroke:var(--border);stroke-width:1;}
+.rc-axis{fill:var(--muted);font-size:11px;}
+.rc-band{opacity:.13;}
+.rc-dot{stroke:var(--bg-elev);stroke-width:1.5;cursor:pointer;transition:r .12s;}
+.rc-dot:hover{r:6;}
+.rc-tooltip{position:fixed;z-index:1200;pointer-events:none;display:none;max-width:280px;
+  background:var(--bg-elev);color:var(--text);border:1px solid var(--border);
+  border-radius:8px;padding:9px 12px;font-size:.85em;line-height:1.6;box-shadow:var(--shadow-l);}
+.rc-tooltip .rc-tt-name{font-weight:700;display:block;margin-bottom:3px;word-break:break-all;}
+
+/* ==================== 折叠详情 ==================== */
+.contest-row{cursor:pointer;color:var(--primary);font-weight:600;}
+.contest-details{display:none;background:var(--bg-soft);padding:12px;border-radius:7px;margin-top:8px;
+  border-left:3px solid var(--primary);text-align:left;}
+
+/* ==================== 用户导航锚点 ==================== */
+.user-nav{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;}
+.user-nav a{padding:6px 14px;border-radius:18px;background:var(--bg-soft);border:1px solid var(--border);font-weight:600;}
+
+/* ==================== 错误提示 ==================== */
+.alert{padding:13px 16px;border-radius:9px;background:rgba(231,76,60,.12);
+  border:1px solid var(--danger);color:var(--danger);margin-bottom:18px;font-weight:600;}
+
+/* ==================== 加载遮罩 ==================== */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;
+  z-index:999;backdrop-filter:blur(2px);}
+.overlay.show{display:flex;}
+.spinner{width:54px;height:54px;border:5px solid rgba(255,255,255,.3);border-top-color:#fff;
+  border-radius:50%;animation:spin .8s linear infinite;}
+.overlay .tip{color:#fff;margin-top:18px;font-size:1.05em;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* ==================== Toast ==================== */
+#toasts{position:fixed;right:22px;bottom:22px;z-index:1000;display:flex;flex-direction:column;gap:10px;}
+.toast{padding:13px 18px;border-radius:9px;color:#fff;font-weight:600;box-shadow:var(--shadow-l);
+  animation:slidein .25s;min-width:200px;}
+.toast.ok{background:var(--success);}.toast.err{background:var(--danger);}.toast.info{background:var(--primary);}
+@keyframes slidein{from{transform:translateX(30px);opacity:0;}to{transform:none;opacity:1;}}
+
+/* ==================== 顶栏导航 ==================== */
+.topbar h1{flex:0 1 auto;}
+.topnav{display:flex;gap:6px;margin-left:auto;flex-wrap:wrap;}
+.topnav a{padding:7px 13px;border-radius:8px;font-weight:600;color:var(--text);font-size:.92em;
+  border:1px solid transparent;}
+.topnav a:hover{background:var(--bg-soft);text-decoration:none;}
+.topnav a.active{background:var(--primary);color:#fff;}
+
+/* ==================== 弱点墙 ==================== */
+.wall{display:flex;flex-direction:column;gap:8px;margin-top:12px;}
+.wall-row{display:flex;align-items:center;gap:10px;}
+.wall-row.is-wall .wall-track{box-shadow:0 0 0 2px var(--danger);}
+.wall-label{width:135px;text-align:right;font-size:.85em;flex-shrink:0;}
+.wall-track{flex:1;background:var(--bg-soft);border-radius:6px;overflow:hidden;height:22px;border:1px solid var(--border);}
+.wall-fill{height:100%;border-radius:6px;display:flex;align-items:center;padding-left:8px;
+  font-size:.78em;font-weight:700;min-width:34px;white-space:nowrap;transition:width .6s;}
+.wall-num{width:132px;font-size:.82em;flex-shrink:0;}
+.wall-badge{display:inline-block;padding:1px 7px;border-radius:5px;font-size:.92em;font-weight:700;margin-left:4px;}
+.wall-badge.ok{background:rgba(46,204,113,.18);color:var(--success);}
+.wall-badge.bad{background:rgba(231,76,60,.18);color:var(--danger);}
+
+/* ==================== 刷题器 ==================== */
+.picker-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-top:14px;}
+.picker-field label{display:flex;align-items:center;gap:8px;font-size:.9em;font-weight:600;margin-bottom:6px;color:var(--text);}
+.picker-field input,.picker-field select{width:100%;padding:10px 12px;border:2px solid var(--border);
+  border-radius:8px;font-size:.95em;background:var(--bg-elev);color:var(--text);}
+.picker-range{display:flex;align-items:center;gap:8px;}
+.picker-range input{flex:1;min-width:0;}
+.tag-pick{display:flex;flex-wrap:wrap;gap:6px;max-height:170px;overflow-y:auto;padding:9px;
+  background:var(--bg-soft);border:1px solid var(--border);border-radius:8px;margin-top:6px;}
+
+/* ==================== 团队技能矩阵 ==================== */
+table.matrix th,table.matrix td{padding:9px 12px;}
+.matrix-best{background:rgba(46,204,113,.16);font-weight:800;color:var(--success);}
+
+/* ==================== head-to-head 对比 ==================== */
+:root{--vs-a:#3b6ef0;--vs-b:#e67e22;}
+.vs-a-c{color:var(--vs-a);font-weight:700;}
+.vs-b-c{color:var(--vs-b);font-weight:700;}
+.vs-a-bg{background:var(--vs-a);}
+.vs-b-bg{background:var(--vs-b);}
+.vs-input-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+.vs-input-row input{flex:1;min-width:180px;padding:12px 16px;border:2px solid var(--border);
+  border-radius:9px;font-size:1em;background:var(--bg-elev);color:var(--text);}
+.vs-input-row input:focus{outline:none;border-color:var(--primary);}
+.vs-sep{font-weight:800;color:var(--muted);}
+.vs-head{display:flex;align-items:center;justify-content:space-between;gap:14px;text-align:center;}
+.vs-name{flex:1;font-size:1.25em;font-weight:700;line-height:1.5;word-break:break-all;}
+.vs-name span span,.vs-name>span{font-size:.7em;}
+.vs-score{flex:0 0 auto;min-width:140px;}
+.vs-bigscore{font-size:2.2em;font-weight:800;letter-spacing:2px;}
+.vs-legend{display:flex;align-items:center;gap:6px;font-size:.9em;color:var(--muted);margin-bottom:6px;}
+.vs-dot{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:middle;}
+.vs-chart{width:100%;margin-top:4px;}
+table.vs-stat{width:100%;border-collapse:collapse;}
+table.vs-stat th,table.vs-stat td{padding:11px 10px;text-align:center;border-bottom:1px solid var(--border);}
+table.vs-stat td:nth-child(2){color:var(--muted);font-size:.92em;}
+.lead-a{background:rgba(59,110,240,.14);font-weight:800;}
+.lead-b{background:rgba(230,126,34,.14);font-weight:800;}
+/* 难度分布背靠背 */
+.bb{display:flex;flex-direction:column;gap:7px;margin-top:10px;}
+.bb-row{display:flex;align-items:center;gap:8px;}
+.bb-num{width:38px;font-size:.82em;font-weight:700;}
+.bb-side{flex:1;display:flex;align-items:center;height:18px;}
+.bb-side.left{justify-content:flex-end;}
+.bb-bar{height:16px;border-radius:4px;min-width:2px;transition:width .5s;}
+.bb-label{width:150px;text-align:center;font-size:.84em;flex-shrink:0;line-height:1.2;}
+
+/* ==================== 刷题活跃热力图 ==================== */
+.hm-stats{display:flex;flex-wrap:wrap;gap:16px;margin:4px 0 12px;font-size:.9em;color:var(--muted);}
+.hm-stats b{color:var(--text);font-size:1.05em;}
+.hm-wrap{overflow-x:auto;padding-bottom:4px;}
+.hm-months{display:grid;grid-auto-flow:column;grid-auto-columns:13px;gap:3px;margin-bottom:4px;
+  font-size:.7em;color:var(--muted);min-width:max-content;}
+.hm-months span{white-space:nowrap;overflow:visible;}
+.hm-grid{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,13px);grid-auto-columns:13px;
+  gap:3px;min-width:max-content;}
+.hm-cell{width:13px;height:13px;border-radius:3px;}
+.hm-empty{background:transparent;}
+.hm-l0{background:var(--bg-soft);border:1px solid var(--border);}
+.hm-l1{background:#9be9a8;}.hm-l2{background:#40c463;}.hm-l3{background:#30a14e;}.hm-l4{background:#216e39;}
+.hm-legend{display:flex;align-items:center;gap:4px;margin-top:8px;font-size:.8em;color:var(--muted);}
+.hm-legend .hm-cell{display:inline-block;}
+
+/* ==================== 题单收藏 ==================== */
+.reco-card{position:relative;}
+.reco-card .reco-name{padding-right:22px;}
+.star{position:absolute;top:7px;right:10px;font-size:1.15em;line-height:1;color:var(--warn);
+  cursor:pointer;user-select:none;text-decoration:none;transition:transform .12s;}
+.star:hover{transform:scale(1.25);}
+.star.starred{color:#f1c40f;}
+.nav-badge{display:inline-block;background:var(--warn);color:#fff;border-radius:10px;
+  padding:0 6px;font-size:.78em;font-weight:700;}
+.todo-list{display:flex;flex-direction:column;gap:8px;margin-top:10px;}
+.todo-item{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:11px 14px;
+  background:var(--bg-soft);border:1px solid var(--border);border-radius:9px;border-left:4px solid var(--primary);}
+.todo-item.done{opacity:.62;border-left-color:var(--success);}
+.todo-item.done .todo-name{text-decoration:line-through;}
+.todo-name{font-weight:600;}
+.todo-tags{flex:1;min-width:120px;}
+.todo-actions{display:flex;gap:8px;margin-left:auto;}
+.todo-btn{padding:6px 12px;font-size:.82em;}
+
+@media(max-width:720px){
+  .topbar h1{font-size:1.15em;} .histo-label{width:78px;} .card{padding:18px;}
+  .topnav a{padding:6px 9px;font-size:.82em;} .wall-label{width:90px;} .wall-num{width:96px;}
+  .vs-bigscore{font-size:1.6em;} .bb-label{width:92px;} .vs-name{font-size:1.05em;}
+}

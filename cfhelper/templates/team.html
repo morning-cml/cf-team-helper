@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}组队作战 | CF 团队助手{% endblock %}
+
+{% block body %}
+<div class="card">
+  <h2>🤝 组队作战板</h2>
+  <p class="muted">输入你的队伍成员（ICPC 3 人，最多 {{ team_max }} 人），生成：标签技能矩阵 + 比赛分工建议 + 全队共同弱项 + 全队都没做过的合练题单。</p>
+  <form method="post" class="search-box" id="teamForm">
+    <input type="text" name="handles" id="teamInput" required value="{{ prefill }}"
+           placeholder="队员用户名，逗号分隔，例：jiangly, tourist, Benq">
+    <button type="submit" class="btn-primary">🤝 生成作战板</button>
+  </form>
+  {% if army %}
+  <div style="margin-top:12px;">
+    <span class="muted">从大部队快速填入：</span>
+    {% for m in army %}<span class="chip pick-army" data-h="{{ m.handle }}">{{ m.handle }}</span>{% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+{% if errors %}
+<div class="alert">⚠️ 以下用户名查询失败（不存在或网络问题）：{{ errors|join('、') }}</div>
+{% endif %}
+
+{% if result %}
+<div class="card">
+  <h3>队伍概览（{{ result.members|length }} 人 · 已解题并集 {{ result.union_size }} 题）</h3>
+  <div class="reco-grid" style="margin-top:6px;">
+    {% for m in result.members %}
+    <div class="reco-card">
+      <span class="reco-name {{ m.rank_info.current_color }}">{{ m.handle }}</span><br>
+      <span class="muted">{{ m.rank_info.current_name }} · {{ m.rating }}</span>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card">
+  <h3>🧭 比赛分工建议（按擅长标签，谁开哪类题）</h3>
+  {% if result.assignment %}
+  <div class="reco-grid">
+    {% for handle, tags in result.assignment.items() %}
+    <div class="reco-card" style="border-left-color:var(--success);">
+      <span class="reco-name">{{ handle }}</span>
+      <div style="margin-top:6px;">{% for t in tags %}<span class="chiptag">{{ t }}</span>{% endfor %}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}<p class="muted">数据不足以给出分工。</p>{% endif %}
+  {% if result.weak_tags %}
+  <p style="margin-top:16px;"><strong style="color:var(--danger);">⚠️ 全队共同弱项（谁都不强，建议一起合练）：</strong>
+    <span class="down">{{ result.weak_tags|join('、') }}</span></p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h3>📊 标签技能矩阵（数字 = 该标签已解题数，🏆 = 全队最强）</h3>
+  <div class="table-wrap">
+  <table class="matrix">
+    <thead><tr><th style="text-align:left;">标签</th>{% for m in result.members %}<th>{{ m.handle }}</th>{% endfor %}</tr></thead>
+    <tbody>
+      {% for row in result.matrix %}
+      <tr>
+        <td style="text-align:left;"><strong>{{ row.tag }}</strong> <span class="muted" style="font-size:.82em;">({{ row.team_total }})</span></td>
+        {% for c in row.cells %}
+        <td class="{{ 'matrix-best' if c.best else '' }}">{{ c.count }}{% if c.best %} 🏆{% endif %}</td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+{% if result.practice %}
+<div class="card">
+  <h3>🎯 全队合练题单（全员都没做过 · {{ result.practice_range[0] }}~{{ result.practice_range[1] }} 分{% if result.weak_tags %} · 优先共同弱项{% endif %}，点击直达）</h3>
+  <div class="reco-grid">
+    {% for p in result.practice %}
+    <a class="reco-card" href="{{ p.url }}" target="_blank">
+      <span class="star" title="加入题单" onclick="event.preventDefault();event.stopPropagation();todoAdd(this)"
+            data-key="{{ p.key }}" data-name="{{ p.name }}" data-rating="{{ p.rating }}" data-tags="{{ p.tags|join(',') }}">☆</span>
+      <span class="reco-name">{{ p.name }}</span>
+      <span class="reco-rating">{{ p.rating }}</span>
+      {% for t in p.hit %}<span class="diff-tag d-med1" style="font-size:.75em;">{{ t }}</span>{% endfor %}
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}
+
+{% block scripts %}<script src="{{ url_for('static', filename='js/team.js') }}"></script>{% endblock %}

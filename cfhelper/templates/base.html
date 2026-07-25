@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}CF 团队助手{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<script>
+  // 在渲染前就定好主题，避免深色模式刷新时白屏闪烁（FOUC）
+  (function () { try { document.documentElement.setAttribute('data-theme', localStorage.getItem('cf-theme') || 'light'); } catch (e) {} })();
+</script>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>⚔️ CF 团队助手<span class="ver">v{{ version }}</span></h1>
+  <nav class="topnav">
+    <a href="/"       class="{{ 'active' if request.path == '/' else '' }}">🏠 首页</a>
+    <a href="/picker" class="{{ 'active' if request.path == '/picker' else '' }}">🎲 刷题器</a>
+    <a href="/team"   class="{{ 'active' if request.path == '/team' else '' }}">🤝 组队作战</a>
+    <a href="/vs"     class="{{ 'active' if request.path == '/vs' else '' }}">🆚 对比</a>
+    <a href="/todo"   class="{{ 'active' if request.path == '/todo' else '' }}">⭐ 题单{% if todo_count %} <span class="nav-badge">{{ todo_count }}</span>{% endif %}</a>
+  </nav>
+  <button class="icon-btn" id="themeBtn" title="切换深色/浅色">🌙</button>
+</div>
+
+{% block body %}{% endblock %}
+
+<div class="overlay" id="overlay">
+  <div style="text-align:center;"><div class="spinner"></div><div class="tip">正在查询 Codeforces，请稍候…</div></div>
+</div>
+<div id="toasts"></div>
+
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

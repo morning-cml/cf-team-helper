@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}对比 | CF 团队助手{% endblock %}
+
+{% block body %}
+<div class="card">
+  <h2>🆚 个人 vs 队友 对比</h2>
+  <p class="muted">两名选手 head-to-head：核心数据、双线 Rating 走势、同场交锋战绩、难度 / 标签强弱、已解题集合。<b class="vs-a-c">A 蓝</b> ｜ <b class="vs-b-c">B 橙</b>。</p>
+  <form method="post" id="vsForm" class="vs-input-row">
+    <input type="text" name="handle_a" id="vsA" value="{{ prefill_a }}" placeholder="选手 A（你）" required>
+    <span class="vs-sep">VS</span>
+    <input type="text" name="handle_b" id="vsB" value="{{ prefill_b }}" placeholder="选手 B（对手 / 队友）" required>
+    <button type="submit" class="btn-primary">⚔️ 开始对比</button>
+  </form>
+  {% if army %}
+  <div style="margin-top:12px;">
+    <span class="muted">从大部队快速填入（依次填 A、B）：</span>
+    {% for m in army %}<span class="chip pick-army" data-h="{{ m.handle }}">{{ m.handle }}</span>{% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+{% if errors %}
+<div class="alert">⚠️ {{ errors|join('；') }}</div>
+{% endif %}
+
+{% if result %}
+{% set A = result.a %}{% set B = result.b %}
+<!-- 对决标题 + 同场战绩比分 -->
+<div class="card vs-head">
+  <div class="vs-name"><span class="vs-a-c">{{ A.handle }}</span><br>
+    <span class="{{ A.rank_info.current_color }}">{{ A.rank_info.current_name }} · {{ A.rating }}</span></div>
+  <div class="vs-score">
+    {% if result.contests.shared %}
+    <div class="vs-bigscore"><span class="vs-a-c">{{ result.contests.a_wins }}</span> : <span class="vs-b-c">{{ result.contests.b_wins }}</span></div>
+    <div class="muted">{{ result.contests.shared }} 场同场交锋{% if result.contests.ties %} · {{ result.contests.ties }} 平{% endif %}</div>
+    {% else %}
+    <div class="vs-bigscore">—</div><div class="muted">无同场参赛记录</div>
+    {% endif %}
+  </div>
+  <div class="vs-name"><span class="vs-b-c">{{ B.handle }}</span><br>
+    <span class="{{ B.rank_info.current_color }}">{{ B.rank_info.current_name }} · {{ B.rating }}</span></div>
+</div>
+
+<!-- 核心数据 -->
+<div class="card">
+  <h3>📊 核心数据对比</h3>
+  <table class="vs-stat">
+    <thead><tr><th class="vs-a-c">{{ A.handle }}</th><th>指标</th><th class="vs-b-c">{{ B.handle }}</th></tr></thead>
+    <tbody>
+      {% for r in result.stat_rows %}
+      <tr>
+        <td class="{{ 'lead-a' if r.winner=='a' else '' }}">{{ r.a }}{% if r.winner=='a' %} 🏆{% endif %}</td>
+        <td class="muted">{{ r.label }}</td>
+        <td class="{{ 'lead-b' if r.winner=='b' else '' }}">{{ r.b }}{% if r.winner=='b' %} 🏆{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- 双线 Rating 走势 -->
+<div class="card">
+  <h3>📈 Rating 走势对比</h3>
+  <div class="vs-legend"><span class="vs-dot vs-a-bg"></span>{{ A.handle }}　<span class="vs-dot vs-b-bg"></span>{{ B.handle }}</div>
+  <div class="vs-chart" data-a="{{ A.handle }}" data-b="{{ B.handle }}">
+    <script type="application/json" class="vs-a">{{ result.chart_a|tojson }}</script>
+    <script type="application/json" class="vs-b">{{ result.chart_b|tojson }}</script>
+  </div>
+</div>
+
+<!-- 同场交锋逐场 -->
+{% if result.contests.recent %}
+<div class="card">
+  <h3>⚔️ 同场交锋（最近 {{ result.contests.recent|length }} 场，名次小者胜）</h3>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th style="text-align:left;">比赛</th><th class="vs-a-c">{{ A.handle }}</th><th>胜方</th><th class="vs-b-c">{{ B.handle }}</th></tr></thead>
+    <tbody>
+      {% for c in result.contests.recent %}
+      <tr>
+        <td style="text-align:left;">{{ c.name }}</td>
+        <td class="{{ 'lead-a' if c.winner=='a' else '' }}">#{{ c.a_rank }}</td>
+        <td>{% if c.winner=='a' %}<span class="vs-a-c">◀ A</span>{% elif c.winner=='b' %}<span class="vs-b-c">B ▶</span>{% else %}<span class="muted">平</span>{% endif %}</td>
+        <td class="{{ 'lead-b' if c.winner=='b' else '' }}">#{{ c.b_rank }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- 难度分布背靠背 -->
+<div class="card">
+  <h3>🧱 难度分布对比（各档已解题数）</h3>
+  <div class="bb">
+    {% for h in result.histogram %}
+    {% if h.a or h.b %}
+    <div class="bb-row">
+      <div class="bb-num vs-a-c" style="text-align:right;">{{ h.a }}</div>
+      <div class="bb-side left"><div class="bb-bar vs-a-bg" style="width:{{ (h.a/result.hist_max*100)|round(1) if result.hist_max else 0 }}%;"></div></div>
+      <div class="bb-label">{{ h.name }} <span class="muted" style="font-size:.8em;">{{ h.desc }}</span></div>
+      <div class="bb-side right"><div class="bb-bar vs-b-bg" style="width:{{ (h.b/result.hist_max*100)|round(1) if result.hist_max else 0 }}%;"></div></div>
+      <div class="bb-num vs-b-c">{{ h.b }}</div>
+    </div>
+    {% endif %}
+    {% endfor %}
+  </div>
+</div>
+
+<!-- 标签强弱 -->
+<div class="card">
+  <h3>🏷️ 标签强弱对比（已解题数，🏆 领先方）</h3>
+  <div class="table-wrap">
+  <table class="vs-stat">
+    <thead><tr><th class="vs-a-c">{{ A.handle }}</th><th>标签</th><th class="vs-b-c">{{ B.handle }}</th></tr></thead>
+    <tbody>
+      {% for t in result.tags %}
+      <tr>
+        <td class="{{ 'lead-a' if t.leader=='a' else '' }}">{{ t.a }}{% if t.leader=='a' %} 🏆{% endif %}</td>
+        <td>{{ t.tag }}</td>
+        <td class="{{ 'lead-b' if t.leader=='b' else '' }}">{{ t.b }}{% if t.leader=='b' %} 🏆{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<!-- 已解题集合 -->
+<div class="card">
+  <h3>🧩 已解题集合</h3>
+  <div class="reco-grid">
+    <div class="reco-card" style="border-left-color:var(--vs-a);"><span class="reco-name vs-a-c">只有 {{ A.handle }} 会</span><br><span class="reco-rating">{{ result.solved.only_a }} 题</span></div>
+    <div class="reco-card"><span class="reco-name">两人都会</span><br><span class="reco-rating">{{ result.solved.common }} 题</span></div>
+    <div class="reco-card" style="border-left-color:var(--vs-b);"><span class="reco-name vs-b-c">只有 {{ B.handle }} 会</span><br><span class="reco-rating">{{ result.solved.only_b }} 题</span></div>
+  </div>
+  <p class="muted" style="margin-top:10px;">「只有对方会」的题，正是可以向 ta 取经 / 优先补的方向。</p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}<script src="{{ url_for('static', filename='js/vs.js') }}"></script>{% endblock %}

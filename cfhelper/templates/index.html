@@ -1,0 +1,325 @@
+{% extends "base.html" %}
+{% block title %}CF 团队 Rating 查看器 | 冲分进度 | 训练计划{% endblock %}
+
+{% block body %}
+<!-- ==================== 大部队 ==================== -->
+<div class="army-section">
+  <h2>🪖 我的大部队 <span style="font-size:.7em;opacity:.85;">共 {{ army|length }} 人</span>
+    <button class="army-head-btn" onclick="refreshArmy(this)">🔄 刷新数据</button>
+  </h2>
+  {% if army %}
+  <div class="army-grid">
+    {% for m in army %}
+    {% set c = rank_colors.get(m.rank_color, '#ffffff') %}
+    <div class="army-card" style="border-left-color:{{ c }};">
+      <div class="army-handle" style="color:{{ c }};">{{ m.handle }}</div>
+      <div class="army-info">
+        当前 Rating：<strong>{{ m.rating }}</strong><br>
+        最高 Rating：{{ m.max_rating }}<br>
+        当前等级：<span style="font-weight:600;">{{ m.rank_name }}</span>
+      </div>
+      <div class="army-btn-group">
+        <button class="army-btn army-btn-detail" onclick="queryMember('{{ m.handle }}')">📊 详情</button>
+        <button class="army-btn army-btn-remove" onclick="removeMember('{{ m.handle }}')">❌ 移出</button>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p style="opacity:.92;margin-top:10px;">大部队暂无成员，查询用户后点击「➕ 加入大部队」添加队友。</p>
+  {% endif %}
+</div>
+
+<!-- ==================== 比赛日历 ==================== -->
+<div class="card contest-calendar">
+  <h2>📅 未来 30 天 CF 比赛日历</h2>
+  {% if upcoming_contests %}
+  <div class="filter-row" id="contestFilter">
+    <span class="chip active" data-lv="all">全部</span>
+    {% for lv in ['Div.4','Div.3','Div.2','Div.1','Div.1+Div.2','Educational','Global'] %}
+    <span class="chip" data-lv="{{ lv }}">{{ lv }}</span>
+    {% endfor %}
+  </div>
+  {% for c in upcoming_contests %}
+  <div class="contest-item" data-lv="{{ c.level }}">
+    <div class="contest-meta">
+      <span class="contest-level {{ c.level_class }}">{{ c.level }}</span>
+      {% if c.level in rec_levels %}<span class="fit-badge" title="匹配已查询用户的等级">🎯 适合你</span>{% endif %}
+      <strong>{{ c.name }}</strong>
+      <span class="muted">🕐 {{ c.start_time }} ｜ ⏱ {{ c.duration }} ｜ ⏳ {{ c.countdown }}</span>
+    </div>
+    <a href="{{ c.url }}" target="_blank"><button class="btn-primary">前往 →</button></a>
+  </div>
+  {% endfor %}
+  {% else %}
+  <p class="muted">暂无未来 30 天的比赛，或数据获取失败。</p>
+  {% endif %}
+</div>
+
+<!-- ==================== 搜索 ==================== -->
+<div class="card">
+  <form method="post" id="searchForm" class="search-box">
+    <input type="text" name="handles" id="handlesInput" required value="{{ prefill }}"
+           placeholder="输入用户名，多个用逗号分隔，例：tourist, jiangly">
+    <select name="contest_type" id="contestType">
+      {% for ct in contest_types %}
+      <option value="{{ ct }}" {{ 'selected' if contest_type==ct else '' }}>{{ ct }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn-primary">🔍 查询 + 预测</button>
+    <button type="button" class="btn-success" onclick="addCurrentToArmy()">➕ 加入大部队</button>
+  </form>
+</div>
+
+{% if errors %}
+<div class="alert">⚠️ 以下用户名查询失败（不存在或网络问题）：{{ errors|join('、') }}</div>
+{% endif %}
+
+{% if data %}
+<!-- 多用户锚点导航 -->
+{% if data|length > 1 %}
+<div class="user-nav">
+  <span class="muted" style="align-self:center;">跳转：</span>
+  {% for u in data %}<a href="#user-{{ u.handle }}">{{ u.handle }}</a>{% endfor %}
+</div>
+{% endif %}
+
+<!-- ==================== 团队总表 ==================== -->
+<div class="card">
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+    <button class="btn-ghost" onclick="sortByRating()">📊 按 Rating 排序</button>
+    <button class="btn-ghost" onclick="filterByMedal()">🏅 按奖牌分组</button>
+    <button class="btn-ghost" onclick="exportCSV()">⬇️ 导出 CSV</button>
+  </div>
+  <div class="table-wrap">
+  <table id="teamTable">
+    <thead><tr>
+      <th>用户名</th><th>Rating</th><th>等级</th><th>最高</th>
+      <th>总提交</th><th>AC</th><th>正确率</th><th>最近比赛</th>
+      <th>TOP 标签</th><th>简单题</th><th>中等题</th><th>困难题</th><th>极难题</th>
+    </tr></thead>
+    <tbody>
+      {% for row in data %}
+      <tr class="{{ row.medal_class }}">
+        <td><strong>{{ row.handle }}</strong></td>
+        <td data-sort="{{ row.rating }}"><strong>{{ row.rating }}</strong></td>
+        <td class="{{ row.rank_info.current_color }}" style="font-weight:600;">{{ row.rank_info.current_name }}</td>
+        <td>{{ row.max_rating }}</td>
+        <td>{{ row.submit }}</td>
+        <td>{{ row.ac }}</td>
+        <td>{{ row.rate }}%</td>
+        <td>
+          {% if row.contests %}
+          <div class="contest-row" onclick="toggleDetails('{{ row.handle }}')">
+            {{ row.contests[0].name[:18] }}… (#{{ row.contests[0].rank }})
+          </div>
+          <div id="details-{{ row.handle }}" class="contest-details">
+            {% for c in row.contests %}
+            <div>{{ c.name }}：#{{ c.rank }}
+              <span class="{{ 'up' if c.rating_change>0 else 'down' }}">
+                {{ '+' if c.rating_change>0 else '' }}{{ c.rating_change }}</span></div>
+            {% endfor %}
+          </div>
+          {% else %}<span class="muted">暂无</span>{% endif %}
+        </td>
+        <td>{% for tag,cnt in row.tags[:5] %}<span class="chiptag">{{ tag }}({{ cnt }})</span>{% endfor %}</td>
+        <td>{% for tag,cnt in row.tags_easy[:3] %}<span class="diff-tag d-easy1">{{ tag }}({{ cnt }})</span>{% endfor %}</td>
+        <td>{% for tag,cnt in row.tags_medium[:3] %}<span class="diff-tag d-med1">{{ tag }}({{ cnt }})</span>{% endfor %}</td>
+        <td>{% for tag,cnt in row.tags_hard[:3] %}<span class="diff-tag d-hard2">{{ tag }}({{ cnt }})</span>{% endfor %}</td>
+        <td>{% for tag,cnt in row.tags_vhard[:3] %}<span class="diff-tag d-exp2">{{ tag }}({{ cnt }})</span>{% endfor %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<!-- ==================== 每位用户详情 ==================== -->
+{% for user in data %}
+<div class="card" id="user-{{ user.handle }}">
+  <h2>{{ user.handle }} ｜
+    <span class="{{ user.rank_info.current_color }}" style="font-weight:700;">{{ user.rank_info.current_name }}</span>
+    （{{ user.rank_info.current_rating }} Rating）
+  </h2>
+  {% if not user.rank_info.is_max %}
+  <div class="progress-bar"><div class="progress-fill" style="width:{{ user.rank_info.progress }}%;">{{ user.rank_info.progress }}%</div></div>
+  <p style="font-size:1.1em;font-weight:600;color:var(--warn);">
+    距升级到【{{ user.rank_info.next_name }}】还差 <span class="up">{{ user.rank_info.need_rating }}</span> 分</p>
+  {% else %}
+  <p style="font-size:1.1em;font-weight:600;color:#ffd700;">🏆 已登顶传奇宗师！</p>
+  {% endif %}
+  {% if user.rating_history|length > 1 %}
+  <p class="muted" style="margin:14px 0 2px;">📈 Rating 走势（{{ user.rating_history|length }} 场比赛 · 悬停看详情）</p>
+  <div class="rating-chart">
+    <script type="application/json" class="rc-data">{{ user.rating_history|tojson }}</script>
+  </div>
+  {% elif user.rating_history|length == 1 %}
+  <p class="muted" style="margin-top:12px;">仅 1 场 Rated 比赛，暂无走势曲线。</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h3>🔥 {{ user.handle }} · 近一年刷题热力图</h3>
+  <div class="hm-stats">
+    <span>解出 <b>{{ user.activity.total }}</b> 题</span>
+    <span>活跃 <b>{{ user.activity.active_days }}</b> 天</span>
+    <span>当前连刷 <b>{{ user.activity.current_streak }}</b> 天</span>
+    <span>最长连刷 <b>{{ user.activity.longest_streak }}</b> 天</span>
+    {% if user.activity.max_day.count %}<span>最高产 <b>{{ user.activity.max_day.count }}</b> 题/天（{{ user.activity.max_day.date }}）</span>{% endif %}
+  </div>
+  <div class="hm-wrap">
+    <div class="hm-months">{% for lab in user.activity.week_months %}<span>{{ lab }}</span>{% endfor %}</div>
+    <div class="hm-grid">
+      {% for week in user.activity.weeks %}{% for cell in week %}{% if cell %}<div class="hm-cell hm-l{{ cell.lv }}" title="{{ cell.d }}：解出 {{ cell.c }} 题"></div>{% else %}<div class="hm-cell hm-empty"></div>{% endif %}{% endfor %}{% endfor %}
+    </div>
+  </div>
+  <div class="hm-legend">少 <span class="hm-cell hm-l0"></span><span class="hm-cell hm-l1"></span><span class="hm-cell hm-l2"></span><span class="hm-cell hm-l3"></span><span class="hm-cell hm-l4"></span> 多 ｜ 强度 = 当天新解出的题数</div>
+</div>
+
+<div class="card">
+  <h3>🎯 {{ user.handle }} · {{ contest_type }} 比赛 Rating 预测</h3>
+  <p class="muted" style="margin-bottom:10px;">※ 基于 CF 官方 Elo 算法 + 各分区真实数据校准，结果为估算值</p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>AC 题数</th><th>预估排名</th><th>百分位</th><th>表现分</th><th>Rating 变化</th><th>赛后 Rating</th><th>赛后等级</th></tr></thead>
+    <tbody>
+      {% for ac_num, pred in user.prediction.items() %}
+      <tr>
+        <td><strong>{{ ac_num }}</strong></td>
+        <td>{{ pred.rank }}</td>
+        <td>前 {{ pred.rank_pct }}%</td>
+        <td>{{ pred.performance }}</td>
+        <td class="{{ 'up' if pred.rating_change>0 else 'down' }}">{{ '+' if pred.rating_change>0 else '' }}{{ pred.rating_change }}</td>
+        <td><strong>{{ pred.new_rating }}</strong></td>
+        <td class="{{ pred.rank_info.current_color }}" style="font-weight:600;">{{ pred.rank_info.current_name }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="card">
+  <h3>📊 {{ user.handle }} · 已解题难度分布（共 {{ user.rated_solved }} 题带难度分）</h3>
+  <div class="histo">
+    {% for b in user.histogram %}
+    {% if b.count > 0 %}
+    <div class="histo-row">
+      <div class="histo-label">{{ b.name }} <span class="muted" style="font-size:.85em;">{{ b.desc }}</span></div>
+      <div class="histo-track"><div class="histo-fill {{ b.cls }}" style="width:{{ (b.count / user.histogram_max * 100)|round(1) if user.histogram_max else 0 }}%;">{{ b.count }}</div></div>
+    </div>
+    {% endif %}
+    {% endfor %}
+  </div>
+
+  <h4 style="margin-top:20px;">各难度档擅长标签</h4>
+  <div class="reco-grid">
+  {% for band in difficulty_bands %}
+    {% set tag_list = user.tags_by_band[band.name] if band.name in user.tags_by_band else [] %}
+    {% if tag_list %}
+    <div class="reco-card" style="border-left-color:transparent;">
+      <span class="diff-tag {{ band.cls }}">{{ band.name }}</span>
+      <span class="muted" style="font-size:.82em;">{{ band.desc }}</span><br>
+      <div style="margin-top:6px;">
+        {% for tag,cnt in tag_list[:5] %}<span class="diff-tag {{ band.cls }}">{{ tag }}({{ cnt }})</span>{% endfor %}
+        {% if tag_list|length > 5 %}<span class="muted" style="font-size:.8em;">+{{ tag_list|length - 5 }}</span>{% endif %}
+      </div>
+    </div>
+    {% endif %}
+  {% endfor %}
+  </div>
+</div>
+
+<!-- ==================== 弱点墙 ==================== -->
+<div class="card">
+  <h3>🧱 {{ user.handle }} · 弱点墙（每档「解出 / 尝试」真实通过率）</h3>
+  <p><strong style="color:var(--warn);">核心结论：</strong>{{ user.weakness_wall.verdict }}</p>
+  {% if user.weakness_wall.target_min %}
+  <a href="/picker?{{ {'rating_min': user.weakness_wall.target_min, 'rating_max': user.weakness_wall.target_max, 'tags': user.training_plan.weak_tags|join(','), 'auto': 1}|urlencode }}">
+    <button class="btn-primary">🎯 去刷题器练这一档（{{ user.weakness_wall.target_min }}~{{ user.weakness_wall.target_max }}{% if user.training_plan.weak_tags %} · 弱项标签{% endif %}）</button>
+  </a>
+  {% endif %}
+  <div class="wall">
+    {% for r in user.weakness_wall.rows %}
+    {% if r.attempted > 0 %}
+    <div class="wall-row{{ ' is-wall' if r.name == user.weakness_wall.wall else '' }}">
+      <div class="wall-label">{{ r.name }} <span class="muted" style="font-size:.82em;">{{ r.desc }}</span></div>
+      <div class="wall-track">
+        <div class="wall-fill {{ r.cls }}" style="width:{{ r.rate if r.rate is not none else 0 }}%;">{{ r.rate if r.rate is not none else '—' }}%</div>
+      </div>
+      <div class="wall-num">
+        <span class="muted">{{ r.solved }}/{{ r.attempted }}</span>
+        {% if r.name == user.weakness_wall.ceiling %}<span class="wall-badge ok">稳固上限</span>{% endif %}
+        {% if r.name == user.weakness_wall.wall %}<span class="wall-badge bad">← 你的墙</span>{% endif %}
+      </div>
+    </div>
+    {% endif %}
+    {% endfor %}
+  </div>
+  <p class="muted" style="margin-top:12px;">※ 分母含没解出的尝试，所以会低于「刷题画像」里的纯 AC 计数；通过率骤降的那档就是该主攻的突破区。</p>
+</div>
+
+<div class="card">
+  <h3>📋 {{ user.handle }} · 个性化三分化训练计划</h3>
+  {% if user.training_plan.unrated %}
+  <p class="muted">※ 该账号未打过 Rated 比赛（CF 无 Rating），以下计划按新手基准分
+    <strong>{{ user.training_plan.plan_rating }}</strong> 给出；打完首场 Rated 比赛后会自动按真实分重算。</p>
+  {% endif %}
+  <p><strong style="color:var(--warn);">核心结论：</strong>{{ user.training_plan.core_suggestion }}</p>
+
+  <div class="training-zone zone-comfort">
+    <h4>🟢 {{ user.training_plan.zones.comfort.desc }}</h4>
+    <p>难度区间：{{ user.training_plan.zones.comfort.min }} ~ {{ user.training_plan.zones.comfort.max }}
+       ｜ 对应：{% for it in user.training_plan.contest_match %}{% if it.zone=='comfort' %}{{ it.contest }} · {{ it.problems }}{% endif %}{% endfor %}</p>
+    <p>强项标签：{% if user.training_plan.strong_tags %}<span class="up">{{ user.training_plan.strong_tags|join('、') }}</span>{% else %}<span class="muted">近况暂无明显强项</span>{% endif %}</p>
+  </div>
+
+  <div class="training-zone zone-improve">
+    <h4>🟡 {{ user.training_plan.zones.improve.desc }}</h4>
+    <p>难度区间：{{ user.training_plan.zones.improve.min }} ~ {{ user.training_plan.zones.improve.max }}
+       ｜ 对应：{% for it in user.training_plan.contest_match %}{% if it.zone=='improve' %}{{ it.contest }} · {{ it.problems }}{% endif %}{% endfor %}</p>
+    <p><strong style="color:var(--danger);">⚠️ 优先攻克薄弱标签：</strong>{% if user.training_plan.weak_tags %}<span class="down">{{ user.training_plan.weak_tags|join('、') }}</span>{% else %}<span class="muted">近况暂无明显薄弱项</span>{% endif %}</p>
+  </div>
+
+  <div class="training-zone zone-challenge">
+    <h4>🔴 {{ user.training_plan.zones.challenge.desc }}</h4>
+    <p>难度区间：{{ user.training_plan.zones.challenge.min }} ~ {{ user.training_plan.zones.challenge.max }}
+       ｜ 对应：{% for it in user.training_plan.contest_match %}{% if it.zone=='challenge' %}{{ it.contest }} · {{ it.problems }}{% endif %}{% endfor %}</p>
+  </div>
+
+  {% if user.recommend %}
+  <h4 style="margin-top:18px;">🔖 提升区推荐题目（未做过{% if user.training_plan.weak_tags %}，命中薄弱标签{% endif %}，点击直达）</h4>
+  <div class="reco-grid">
+    {% for p in user.recommend %}
+    <a class="reco-card" href="{{ p.url }}" target="_blank">
+      <span class="star" title="加入题单" onclick="event.preventDefault();event.stopPropagation();todoAdd(this)"
+            data-key="{{ p.key }}" data-name="{{ p.name }}" data-rating="{{ p.rating }}" data-tags="{{ p.tags|join(',') }}">☆</span>
+      <span class="reco-name">{{ p.name }}</span>
+      <span class="reco-rating">{{ p.rating }}</span>
+      {% for t in p.hit %}<span class="diff-tag d-med1" style="font-size:.75em;">{{ t }}</span>{% endfor %}
+    </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h3>🕐 {{ user.handle }} · 近 90 天标签表现（正确率 = 解出题数 / 尝试题数）</h3>
+  {% set shown = [] %}
+  {% for tag, st in user.recent_tags.items() %}
+    {% if st.total_submit >= min_recent %}
+    {% set _ = shown.append(1) %}
+    <div class="tag-card {{ 'tag-high' if st.ac_rate>=70 else ('tag-low' if st.ac_rate<=30 else '') }}">
+      <strong>{{ tag }}</strong><br>
+      尝试 {{ st.total_submit }} 题 ｜ 解出 {{ st.ac_count }}<br>
+      正确率：<strong>{{ st.ac_rate }}%</strong><br>
+      WA {{ st.wa_count }} ｜ TLE {{ st.tle_count }}
+    </div>
+    {% endif %}
+  {% endfor %}
+  {% if not shown %}<p class="muted">近 90 天暂无足够提交数据（需某标签尝试 ≥ {{ min_recent }} 题）。</p>{% endif %}
+  <p class="muted" style="margin-top:14px;">※ 🟢 正确率 ≥70% 为强项，🔴 ≤30% 为薄弱项，仅展示尝试 ≥{{ min_recent }} 题的标签。</p>
+</div>
+{% endfor %}
+{% endif %}
+{% endblock %}

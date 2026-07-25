@@ -1,0 +1,6 @@
+# 运行依赖
+Flask>=3.0
+requests>=2.31
+
+# 打包依赖（仅生成 exe 时需要，运行不需要）
+# pyinstaller>=6.0

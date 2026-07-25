@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}题单 | CF 团队助手{% endblock %}
+
+{% block body %}
+{% macro todo_item(p) %}
+<div class="todo-item{{ ' done' if p.done else '' }}">
+  <a class="todo-name" href="{{ p.url }}" target="_blank">{{ p.name }}</a>
+  <span class="reco-rating">{{ p.rating }}</span>
+  <span class="todo-tags">{% for t in p.tags[:4] %}<span class="chiptag">{{ t }}</span>{% endfor %}</span>
+  <span class="todo-actions">
+    <button class="btn-ghost todo-btn" onclick="todoToggle('{{ p.key }}')">{{ '↺ 标为待做' if p.done else '✓ 完成' }}</button>
+    <button class="btn-ghost todo-btn" onclick="todoRemove('{{ p.key }}')">✕ 移除</button>
+  </span>
+</div>
+{% endmacro %}
+
+<div class="card">
+  <h2 style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">⭐ 我的题单
+    <span style="font-size:.58em;opacity:.8;font-weight:400;">待做 {{ pending|length }} · 已完成 {{ done|length }}</span>
+    {% if done %}<button class="btn-ghost" style="margin-left:auto;font-size:.62em;" onclick="todoClearDone()">🧹 清空已完成</button>{% endif %}
+  </h2>
+  <p class="muted">在推荐题、🎲 刷题器、🤝 合练题单里点 ☆ 收藏到这里，跨会话保留（存于 data/cf_todo.json）。</p>
+</div>
+
+{% if not items %}
+<div class="card"><p class="muted">题单还是空的。去 <a href="/picker">🎲 刷题器</a> 出题，或查询某人看推荐题，点 ☆ 加进来。</p></div>
+{% else %}
+<div class="card">
+  <h3>📌 待做（{{ pending|length }}）</h3>
+  {% if pending %}<div class="todo-list">{% for p in pending %}{{ todo_item(p) }}{% endfor %}</div>
+  {% else %}<p class="muted">待做清空了，全部完成 🎉</p>{% endif %}
+</div>
+{% if done %}
+<div class="card">
+  <h3>✅ 已完成（{{ done|length }}）</h3>
+  <div class="todo-list">{% for p in done %}{{ todo_item(p) }}{% endfor %}</div>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}
+
+{% block scripts %}<script src="{{ url_for('static', filename='js/todo.js') }}"></script>{% endblock %}

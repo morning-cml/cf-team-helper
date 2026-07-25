@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# PyInstaller 产物
+build/
+dist/
+*.spec
+
+# 运行时数据：都是每台机器自己的东西，不进版本库。
+# 迁移大部队 / 题单请直接复制 data/*.json，不要依赖 git。
+data/*.json
+# 原子写的临时文件 / 损坏文件的备份
+data/*.tmp
+data/*.bad
+
+# 本机专属的 Claude Code 配置（含绝对路径）
+.claude/settings.local.json
+
+# 编辑器
+.vscode/
+.idea/
+.DS_Store
