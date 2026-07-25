@@ -24,6 +24,7 @@ import random
 import re
 import threading
 import time
+from collections import Counter
 
 from . import cf_api, config
 from .paths import atomic_write_json, read_json
@@ -344,6 +345,23 @@ def progress_stats(contests, progress):
             s["touched"] += 1
             s["solved"] += p["count"]
     return [stats[t["key"]] for t in reversed(TIERS)]
+
+
+def problem_counts(contests):
+    """一次性算出每场比赛的题目数 {contestId: n}，拿不到题单的不收录。
+
+    不逐场调 contest_problems 是因为它对正式赛要扫一遍全量题库（1.1 万条），
+    160 场就是 176 万次比较——页面每次渲染都跑一遍太浪费。这里先按 contestId
+    归一次组，之后都是 O(1) 查表。
+    """
+    official = Counter(p["contest_id"] for p in cf_api.PROBLEMS)
+    plist = _load_plist()
+    out = {}
+    for c in contests:
+        n = official.get(c["id"]) or len(plist.get(str(c["id"])) or [])
+        if n:
+            out[c["id"]] = n
+    return out
 
 
 def blank_progress(contest):

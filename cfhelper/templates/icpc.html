@@ -131,7 +131,8 @@
         {% endfor %}
       </span>
       {% else %}
-      <span class="icpc-prog muted">—</span>
+      {# 没做过的场次：与其占个空位，不如告诉你这场有多大 #}
+      <span class="icpc-prog muted">{% if counts.get(c.id) %}{{ counts[c.id] }} 题{% else %}题单未知{% endif %}</span>
       {% endif %}
     </div>
     {% endfor %}

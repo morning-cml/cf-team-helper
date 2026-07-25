@@ -364,6 +364,7 @@ def register(app):
             progress=progress, stats=stats, army=army.load_army(),
             team_max=config.TEAM_MAX_SIZE,
             fetch_state=icpc.problem_fetch_state(items),
+            counts=icpc.problem_counts(items),      # 没做过的场次显示题目数，而不是一个空占位符
         )
 
     @app.route("/api/icpc/draw", methods=["POST"])
