@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """Flask 路由：主页查询 + 刷题器 + 组队作战 + 大部队增删刷 + 心跳。"""
 import os
 import threading
@@ -365,6 +365,7 @@ def register(app):
             team_max=config.TEAM_MAX_SIZE,
             fetch_state=icpc.problem_fetch_state(items),
             counts=icpc.problem_counts(items),      # 没做过的场次显示题目数，而不是一个空占位符
+            medals={c["id"]: icpc.contest_medals(c["id"]) for c in items},
         )
 
     @app.route("/api/icpc/draw", methods=["POST"])
@@ -393,7 +394,7 @@ def register(app):
     def api_icpc_fetch():
         """启动后台抓取各场题单（需 API 密钥）。历史赛事题单不变，全程只需跑一次。"""
         items = icpc.get_contests()
-        started = icpc.fetch_problem_lists(items)
+        started = icpc.fetch_missing_data(items)
         st = icpc.problem_fetch_state(items)
         if not started and not st["has_key"]:
             return jsonify({"success": False, "msg": "未配置 CF API 密钥，无法抓取 Gym 题单"})

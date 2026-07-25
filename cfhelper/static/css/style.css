@@ -353,9 +353,18 @@ table.vs-stat td:nth-child(2){color:var(--muted);font-size:.92em;}
   border-left:3px solid transparent;font-size:.92em;}
 .icpc-item.is-done{border-left-color:var(--success);background:rgba(46,204,113,.08);}
 .icpc-year{width:44px;flex-shrink:0;font-weight:700;color:var(--muted);font-size:.9em;}
-.icpc-name{flex:1;min-width:220px;font-weight:600;}
+/* 名字按内容宽度，好让奖牌线紧跟在名字后面；剩下的空当交给 margin-left:auto 顶开 */
+.icpc-name{flex:0 1 auto;min-width:0;font-weight:600;}
+.icpc-medal{display:inline-flex;gap:4px;flex-shrink:0;font-size:.76em;}
+.icpc-medal b{padding:1px 6px;border-radius:4px;font-weight:700;white-space:nowrap;}
+.icpc-medal .mc{background:rgba(192,57,43,.16);color:#c0392b;}
+.icpc-medal .mg{background:rgba(212,160,23,.18);color:#a67c00;}
+.icpc-medal .ms{background:rgba(127,140,141,.20);color:#6b7778;}
+html[data-theme="dark"] .icpc-medal .mc{color:#ef8a7c;}
+html[data-theme="dark"] .icpc-medal .mg{color:#e8bf4d;}
+html[data-theme="dark"] .icpc-medal .ms{color:#b3bfc0;}
 .icpc-src{font-size:.74em;padding:1px 7px;border-radius:4px;background:var(--border);
-  color:var(--muted);flex-shrink:0;}
+  color:var(--muted);flex-shrink:0;margin-left:auto;}
 .icpc-prog{flex-shrink:0;font-size:.88em;min-width:104px;text-align:right;}
 .icpc-prog b{color:var(--success);}
 .icpc-idx{display:block;font-size:.82em;color:var(--muted);letter-spacing:1px;}

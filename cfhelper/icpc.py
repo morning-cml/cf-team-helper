@@ -183,10 +183,11 @@ def get_contests(force=False, cn_only=True):
 # ==================== 各场题号列表：正式赛来自题库，Gym 需签名抓取 ====================
 # 历史比赛的题目组成永不变化，所以这份缓存没有 TTL，抓到就一直用。
 _plist = None
+_medals = None
 _plist_lock = threading.Lock()
 
-# 后台抓取任务状态，供页面轮询进度
-_fetch = {"running": False, "done": 0, "total": 0, "ok": 0, "error": ""}
+# 后台抓取任务状态，供页面轮询进度。phase: problems（题单，快）/ medals（榜单，慢）
+_fetch = {"running": False, "phase": "", "done": 0, "total": 0, "ok": 0, "error": ""}
 
 
 def _load_plist():
@@ -200,6 +201,24 @@ def _load_plist():
 def _save_plist():
     with _plist_lock:
         atomic_write_json(config.ICPC_PROBLEMS_FILE, _plist, indent=None)
+
+
+def _load_medals():
+    global _medals
+    with _plist_lock:
+        if _medals is None:
+            _medals = read_json(config.ICPC_MEDALS_FILE) or {}
+        return _medals
+
+
+def _save_medals():
+    with _plist_lock:
+        atomic_write_json(config.ICPC_MEDALS_FILE, _medals, indent=None)
+
+
+def contest_medals(contest_id):
+    """该场的奖牌线；没抓过或拿不到赛场数据返回 None（空字典是"抓过但没有"的标记）。"""
+    return _load_medals().get(str(contest_id)) or None
 
 
 def contest_problems(contest_id):
@@ -223,63 +242,93 @@ def contest_problems(contest_id):
 
 
 def problem_fetch_state(contests=None):
-    """题单抓取的进度快照，用于页面展示与轮询。
+    """抓取进度快照，用于页面展示与轮询。
 
-    区分三种状态：已覆盖 / 还没抓过（可以抓）/ 抓过但 CF 不开放（再抓也没用，
-    如受限的邀请制赛事）。不区分的话页面会一直催你去抓那些永远抓不到的场次。
+    题单与奖牌线各自统计，且都区分三种状态：已覆盖 / 还没抓过 / 抓过但 CF 不给。
+    不区分第三种的话，页面会一直催你去抓那些永远抓不到的场次。
     """
     st = dict(_fetch)
     if contests is not None:
-        plist = _load_plist()
-        covered = missing = unavailable = 0
+        plist, medals = _load_plist(), _load_medals()
+        cov = miss = unavail = 0
+        m_cov = m_miss = m_unavail = 0
         for c in contests:
+            cid = str(c["id"])
             if contest_problems(c["id"]):
-                covered += 1
-            elif str(c["id"]) in plist:
-                unavailable += 1                 # 抓过，CF 明确不给
+                cov += 1
+            elif cid in plist:
+                unavail += 1                     # 抓过，CF 明确不给
             else:
-                missing += 1
-        st.update(covered=covered, missing=missing, unavailable=unavailable,
-                  total_contests=len(contests))
+                miss += 1
+            if medals.get(cid):
+                m_cov += 1
+            elif cid in medals:
+                m_unavail += 1                   # 抓过，但这场没有赛场队伍
+            else:
+                m_miss += 1
+        st.update(covered=cov, missing=miss, unavailable=unavail,
+                  medal_covered=m_cov, medal_missing=m_miss,
+                  medal_unavailable=m_unavail, total_contests=len(contests))
     st["has_key"] = cf_api.has_api_key()
     return st
 
 
-def fetch_problem_lists(contests, delay=None):
-    """后台把缺失的题单逐场抓下来。
+def fetch_missing_data(contests, delay=None):
+    """后台补齐题单与奖牌线，分两段跑。
 
-    实测串行 1.47s/场、连打不触发限流，157 场约 4 分钟。每 10 场落一次盘，
-    这样即使中途关页面导致进程退出，已抓到的部分也不会白费。
+    两段的代价差一个量级，所以进度里带 phase，让人知道时间花在哪：
+    - problems：contest.standings 只取 1 行榜单，服务端仍会带回完整题目数组，约 1.5s/场；
+    - medals  ：必须整份榜单拉下来（真实赛场队伍以 ghost 身份混在练习榜里，
+                且 showUnofficial=false 对 gym 返回 0 行），单场可达 3MB、约 4s。
+
+    每 10 场落一次盘，中途关页面导致进程退出也不丢已抓到的部分。
     """
     if _fetch["running"]:
         return False
-    # 没密钥时 gym 场必然抓不到，但正式赛（匿名可取）仍值得跑一趟
     if not cf_api.has_api_key() and all(c["gym"] for c in contests):
         _fetch["error"] = "未配置 API 密钥"
         return False
 
+    def run_phase(phase, todo, handle_one, save):
+        _fetch.update(phase=phase, done=0, ok=0, total=len(todo))
+        for i, c in enumerate(todo, 1):
+            if handle_one(c):
+                _fetch["ok"] += 1
+            _fetch["done"] = i
+            if i % 10 == 0:
+                save()
+            time.sleep(delay if delay is not None else config.ICPC_FETCH_DELAY)
+        save()
+
+    def one_problem(c):
+        idx = cf_api.get_contest_problem_indices(c["id"], gym=c["gym"])
+        # 记空列表 = "抓过但 CF 不开放"，避免每次都当成待抓项反复重试
+        _plist[str(c["id"])] = idx or []
+        return bool(idx)
+
+    def one_medal(c):
+        rows = cf_api.get_standings_rows(c["id"], gym=c["gym"])
+        m = medal_lines(rows) if rows else None
+        _medals[str(c["id"])] = m or {}
+        return bool(m)
+
     def worker():
-        _fetch.update(running=True, done=0, ok=0, error="")
-        plist = _load_plist()
-        todo_list = [c for c in contests if contest_problems(c["id"]) is None]
-        _fetch["total"] = len(todo_list)
+        _fetch.update(running=True, error="")
+        _load_plist()
+        _load_medals()
         try:
-            for i, c in enumerate(todo_list, 1):
-                idx = cf_api.get_contest_problem_indices(c["id"], gym=c["gym"])
-                # 记空列表表示"抓过但 CF 不开放"，避免每次都把它当成待抓项反复重试
-                plist[str(c["id"])] = idx or []
-                if idx:
-                    _fetch["ok"] += 1
-                _fetch["done"] = i
-                if i % 10 == 0:
-                    _save_plist()                      # 增量落盘，中途退出不丢进度
-                time.sleep(delay if delay is not None else config.ICPC_FETCH_DELAY)
-            _save_plist()
-        except Exception as e:                          # 网络异常不该让线程静默死掉
+            run_phase("problems",
+                      [c for c in contests if contest_problems(c["id"]) is None],
+                      one_problem, _save_plist)
+            run_phase("medals",
+                      [c for c in contests if str(c["id"]) not in _medals],
+                      one_medal, _save_medals)
+        except Exception as e:                    # 网络异常不该让线程静默死掉
             _fetch["error"] = str(e)
             _save_plist()
+            _save_medals()
         finally:
-            _fetch["running"] = False
+            _fetch.update(running=False, phase="")
 
     threading.Thread(target=worker, daemon=True).start()
     return True
@@ -345,6 +394,48 @@ def progress_stats(contests, progress):
             s["touched"] += 1
             s["solved"] += p["count"]
     return [stats[t["key"]] for t in reversed(TIERS)]
+
+
+def medal_lines(rows):
+    """从榜单算出「解出几题能拿冠军 / 金 / 银 / 铜」。拿不到赛场数据返回 None。
+
+    只认 ghost 队伍
+    ---------------
+    CF Gym 榜单里绝大多数是赛后练习的人，真实赛场队伍是以 ghost 身份导入的
+    （注意它们的 participantType 是 VIRTUAL 而非 CONTESTANT，按类型筛会一支都取不到）。
+    把练习者算进去等于拿练习成绩定奖牌线，必须只取 ghost。
+
+    「保底题数」口径
+    ---------------
+    解出 S 题能保证进前 R 名  ⟺  解出 ≥S 题的队伍不超过 R 支。
+    因为同题数之间比罚时，只有当"解出 ≥S 的队伍数 ≤ R"时，S 才是稳拿的。
+    这正好实现了"5 题和 6 题都可能拿银时，报 6"——5 题不稳，6 题才稳。
+
+    冠军直接取榜首实际解出的题数（那是事实，不是推算）。
+
+    注意：金银铜线是按名次百分位**估算**的（CF 没有奖牌信息），
+    各赛区实际颁奖数每场单独定，调用方须在界面上标注清楚。
+    """
+    solves = sorted((int(r.get("points") or 0) for r in rows
+                     if (r.get("party") or {}).get("ghost")), reverse=True)
+    if not solves:
+        return None
+    n = len(solves)
+
+    def guaranteed(rank_limit):
+        """能稳进前 rank_limit 名所需的最少题数。"""
+        ans = None
+        for s in range(solves[0], 0, -1):
+            if sum(1 for x in solves if x >= s) <= rank_limit:
+                ans = s
+            else:
+                break                       # 再往下只会更多队伍达标，不必继续
+        return ans
+
+    out = {"teams": n, "champion": solves[0]}
+    for key, pct in config.ICPC_MEDAL_PCT.items():
+        out[key] = guaranteed(max(1, int(n * pct / 100)))
+    return out
 
 
 def problem_counts(contests):

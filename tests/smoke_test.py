@@ -467,6 +467,39 @@ def test_icpc_pick_contest():
     assert info["total"] == 6 and picked is not None
 
 
+def test_icpc_medal_lines():
+    """奖牌线：只认赛场队伍、保底口径、以及各种退化情形。"""
+    from cfhelper import icpc
+
+    def rows(dist, ghost=True):
+        out = []
+        for solved, n in dist.items():
+            out += [{"points": solved, "party": {"ghost": ghost}}] * n
+        return out
+
+    # 100 队；金线=前 10 名，银线=前 20 名。
+    # 解出 >=7 的 8 支 <= 10 -> 金报 7；>=6 的 18 支 <= 20 -> 银报 6；>=5 的 33 支 > 20 -> 5 不稳
+    m = icpc.medal_lines(rows({9: 2, 8: 3, 7: 3, 6: 10, 5: 15, 4: 30, 3: 37}))
+    assert m["teams"] == 100 and m["champion"] == 9
+    assert m["gold"] == 7
+    assert m["silver"] == 6, "5 题和 6 题都可能拿银时，应报保底的 6"
+
+    # 练习者（非 ghost）不能参与计算——否则等于拿练习成绩定奖牌线
+    assert icpc.medal_lines(rows({12: 50}, ghost=False)) is None
+    mixed = rows({9: 2, 5: 8}) + rows({13: 99}, ghost=False)
+    assert icpc.medal_lines(mixed)["champion"] == 9, "榜首必须来自赛场队伍"
+    assert icpc.medal_lines(mixed)["teams"] == 10
+
+    # 榜首并列：冠军取榜首实际题数（是事实，不是推算）
+    assert icpc.medal_lines(rows({11: 5, 10: 20, 9: 75}))["champion"] == 11
+
+    # 全员同分：没有任何题数能"稳"进前 10%，金银为 None，调用方需容忍
+    flat = icpc.medal_lines(rows({4: 50}))
+    assert flat["champion"] == 4 and flat["gold"] is None and flat["silver"] is None
+
+    assert icpc.medal_lines([]) is None
+
+
 def test_cf_api_signature():
     """CF 签名算法：apiSig = <rand> + sha512(<rand>/<method>?<字典序参数>#<secret>)。
 
@@ -517,7 +550,7 @@ def test_icpc_problem_list_states():
 
         # 没配密钥时，全是 gym 的任务不该启动（省掉注定失败的请求）
         if not cf_api.has_api_key():
-            assert icpc.fetch_problem_lists(contests) is False
+            assert icpc.fetch_missing_data(contests) is False
     finally:
         config.ICPC_PROBLEMS_FILE, icpc._plist = orig_file, orig_plist
         cf_api.PROBLEMS[:] = saved

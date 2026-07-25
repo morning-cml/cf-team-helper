@@ -104,7 +104,12 @@ function icpcPollFetch() {
         const pct = st.total ? Math.round(st.done / st.total * 100) : 0;
         fill.style.width = pct + '%';
         const left = st.total - st.done;
-        text.textContent = `已抓 ${st.done}/${st.total} 场（成功 ${st.ok}）· 约剩 ${Math.ceil(left * 1.8 / 60)} 分钟`;
+        // 两段的速度差一个量级，分别按各自的速率估剩余时间，否则第二段会显得"卡住"
+        const perSec = st.phase === 'medals' ? 4.5 : 1.8;
+        const label = st.phase === 'medals' ? '第 2/2 段 · 抓奖牌线（榜单较大，较慢）'
+          : '第 1/2 段 · 抓题单';
+        text.textContent = `${label}：${st.done}/${st.total} 场（成功 ${st.ok}）`
+          + ` · 约剩 ${Math.ceil(left * perSec / 60)} 分钟`;
         setTimeout(icpcPollFetch, 2000);
       } else if (box.style.display !== 'none') {
         fill.style.width = '100%';

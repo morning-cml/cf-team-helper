@@ -71,7 +71,7 @@ def _cache_put(key, value):
             del _user_cache[min(_user_cache, key=lambda k: _user_cache[k][0])]
 
 
-def _get(url, params=None):
+def _get(url, params=None, timeout=None):
     """带重试的 GET，返回 CF 标准响应里的 dict（status==OK）或 None。
 
     - 信号量限流：只在真正发请求时占用名额，sleep/解析不占；
@@ -81,7 +81,8 @@ def _get(url, params=None):
     for attempt in range(config.HTTP_RETRY + 1):
         try:
             with _throttle:
-                res = requests.get(url, params=params, timeout=config.HTTP_TIMEOUT)
+                res = requests.get(url, params=params,
+                                   timeout=timeout or config.HTTP_TIMEOUT)
             data = res.json()
             if data.get("status") == "OK":
                 return data
@@ -293,6 +294,25 @@ def get_contest_problem_indices(contest_id, gym=False):
     if not data:
         return None
     return [[p["index"], p.get("name", "")] for p in data["result"]["problems"]]
+
+
+def get_standings_rows(contest_id, gym=False):
+    """拉整份榜单的行，供计算奖牌线。拿不到返回 None。
+
+    必须 showUnofficial=true：对 Gym 而言 showUnofficial=false 直接返回 0 行，
+    而真实赛场队伍是以 ghost 身份混在这份"练习榜"里的，只能整份拉下来再筛。
+    响应可达 3MB，所以单独放宽超时。签名规则同 get_contest_problem_indices。
+    """
+    params = {"contestId": contest_id, "from": 1,
+              "count": config.ICPC_STANDINGS_ROWS, "showUnofficial": "true"}
+    if gym:
+        cred = api_credentials()
+        if not cred:
+            return None
+        params = _sign("contest.standings", params, *cred)
+    data = _get(f"{config.CF_API_BASE}/contest.standings", params,
+                timeout=config.ICPC_STANDINGS_TIMEOUT)
+    return data["result"]["rows"] if data else None
 
 
 def problem_rating(key, default=0):

@@ -4,7 +4,7 @@
 这里只放纯数据，不依赖 Flask / requests，方便单独测试与复用。
 """
 
-APP_VERSION = "2.13"
+APP_VERSION = "2.14"
 
 # ==================== CF API 端点 ====================
 CF_API_BASE      = "https://codeforces.com/api"
@@ -37,6 +37,17 @@ API_KEY_FILE         = "cf_api.json"             # 可选的 CF API 密钥（访
 ICPC_FETCH_DELAY     = 0.3
 # 抽取比赛时的「已吃透」线：解出比例高于此值的场次不再被抽到（练它的边际收益太低）。
 ICPC_PICK_SKIP_RATE  = 60
+
+# ==================== 奖牌线（几题能拿冠军 / 金 / 银） ====================
+ICPC_MEDALS_FILE     = "cf_icpc_medals.json"
+# 榜单要拉的行数。CF Gym 榜单里绝大多数是赛后练习的人，真实赛场队伍（ghost）混在其中，
+# 必须拉够深才能把他们取全——实测南京 2024 共 3136 行，其中赛场队伍 359 支。
+ICPC_STANDINGS_ROWS  = 5000
+# 单场榜单可达 3MB，默认 12 秒超时不够用
+ICPC_STANDINGS_TIMEOUT = 60
+# 奖牌线按名次百分位估算：CF 没有奖牌信息，只能用 ICPC 惯例的前 10%/20%/30% 推。
+# 各赛区实际颁奖数是每场单独定的，所以这是估算值，界面上须标注清楚。
+ICPC_MEDAL_PCT       = {"gold": 10, "silver": 20, "bronze": 30}
 ARMY_FILE            = "cf_army.json"
 TODO_FILE            = "cf_todo.json"           # 题单/待做收藏（跨会话保留）
 CACHE_EXPIRE_SECONDS = 3600          # 比赛列表缓存有效期

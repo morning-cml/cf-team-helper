@@ -28,14 +28,20 @@
     <span class="muted">📄 题单覆盖 <b>{{ fetch_state.covered }}/{{ fetch_state.total_contests }}</b> 场
       —— 其余为 Gym 场次，需配置 CF API 密钥才能取到题目总数（现显示「已解出 N 题」）。
       配置方法见 <code>tools/verify_cf_key.py</code>。</span>
-    {% elif fetch_state.missing %}
-    <span>📄 题单覆盖 <b>{{ fetch_state.covered }}/{{ fetch_state.total_contests }}</b> 场，
-      还有 <b>{{ fetch_state.missing }}</b> 场未抓取（抓完才能显示 <code>3/13</code> 这样的精确进度）。</span>
+    {% elif fetch_state.missing or fetch_state.medal_missing %}
+    <span>📄 题单 <b>{{ fetch_state.covered }}/{{ fetch_state.total_contests }}</b> 场 ·
+      🏅 奖牌线 <b>{{ fetch_state.medal_covered }}/{{ fetch_state.total_contests }}</b> 场。
+      抓完才有「3/13」的精确进度和「几题拿冠军 / 金 / 银」。</span>
     <button class="btn-primary" id="icpcFetchBtn" onclick="icpcFetch(this)"
-            style="padding:6px 14px;font-size:.85em;">📥 抓取题单（约 {{ [(fetch_state.missing * 1.8 / 60)|round|int, 1]|max }} 分钟，只需一次）</button>
+            style="padding:6px 14px;font-size:.85em;">📥 抓取（约 {{ [((fetch_state.missing * 1.8 + fetch_state.medal_missing * 4.5) / 60)|round|int, 1]|max }} 分钟，只需一次）</button>
+    <span class="muted" style="flex-basis:100%;font-size:.9em;">
+      分两段：题单每场约 1.5 秒；奖牌线要把整份榜单拉下来（单场可达 3MB）约 4 秒/场，所以第二段明显更慢。
+      中途关掉页面也不会白抓，已完成的部分会存下来。</span>
     {% else %}
-    <span class="muted">📄 题单已覆盖 <b>{{ fetch_state.covered }}/{{ fetch_state.total_contests }}</b> 场，完成度显示为精确的「解出 / 总题数」。
-      {% if fetch_state.unavailable %}另有 {{ fetch_state.unavailable }} 场 CF 未开放榜单（受限赛事），只能显示「已解出 N 题」。{% endif %}</span>
+    <span class="muted">📄 题单 <b>{{ fetch_state.covered }}/{{ fetch_state.total_contests }}</b> 场 ·
+      🏅 奖牌线 <b>{{ fetch_state.medal_covered }}/{{ fetch_state.total_contests }}</b> 场，均已抓取完毕。
+      {% if fetch_state.unavailable or fetch_state.medal_unavailable %}
+      其中 {{ [fetch_state.unavailable, fetch_state.medal_unavailable]|max }} 场 CF 未开放榜单或无赛场队伍记录，这类拿不到数据。{% endif %}</span>
     {% endif %}
     <div class="icpc-progress" id="icpcFetchProgress" style="display:none;">
       <div class="icpc-progress-bar"><div class="icpc-progress-fill" id="icpcFetchFill"></div></div>
@@ -112,6 +118,14 @@
          data-name="{{ c.name|lower }}" data-done="{{ 1 if p else 0 }}">
       <span class="icpc-year">{{ c.year or '—' }}</span>
       <a class="icpc-name" href="{{ c.url }}" target="_blank">{{ c.name }}</a>
+      {# 奖牌线：冠军是榜首实际题数，金银铜按名次百分位估算，悬停有说明 #}
+      {% set m = medals.get(c.id) %}
+      {% if m %}
+      <span class="icpc-medal"
+            title="基于该场 {{ m.teams }} 支参赛队的真实成绩。&#10;冠军 = 榜首实际解出题数。&#10;金/银 = 按 ICPC 惯例的前 10% / 20% 名次估算，是「稳拿」所需题数（同题数还要比罚时，所以取保底值）。&#10;各赛区实际颁奖数每场单独定，此处为估算。">
+        <b class="mc">冠 {{ m.champion }}</b>{% if m.gold %}<b class="mg">金 {{ m.gold }}</b>{% endif %}{% if m.silver %}<b class="ms">银 {{ m.silver }}</b>{% endif %}
+      </span>
+      {% endif %}
       <span class="icpc-src">{{ 'Gym' if c.gym else '官方' }}</span>
       {% if p %}
       <span class="icpc-prog">
