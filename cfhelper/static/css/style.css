@@ -14,15 +14,19 @@
    --fill-*                是**填充色**（按钮、徽章、Toast 的底），要暗到配得住白字。
    深色模式下这两者诉求相反——链接要更亮、按钮底要更暗——一个变量满足不了。 */
 :root{
-  --bg:#e8ecf1; --bg-elev:#f6f8fb; --bg-soft:#edf1f6;
-  --text:#2b3542; --text-2:#39434f; --muted:#5f6b78;
-  --border:#d6dde6;
-  --primary:#1f6fb2; --primary-d:#17588f;
-  --success:#1a7f47; --success-d:#14663a; --danger:#c02e2e; --warn:#a3620e;
-  --fill-primary:#1f6fb2; --fill-primary-d:#17588f;
-  --fill-success:#1a7f47; --fill-success-d:#14663a;
-  --fill-danger:#c02e2e;  --fill-warn:#a3620e;
-  --shadow:0 2px 10px rgba(28,42,60,.07); --shadow-l:0 4px 16px rgba(28,42,60,.11);
+  /* 暖纸色，卡片亮度约 73%（纯白是 100%）。刻意压得比常见浅色主题暗不少：
+     卡片占了屏幕大部分面积，它的亮度才是"刺不刺眼"的决定因素。
+     偏暖也是有意的——冷蓝白最像"屏幕在发光"，暖调能实打实降低眩光感。 */
+  --bg:#d5d0c6; --bg-elev:#e3ded4; --bg-soft:#dcd7cd;
+  --text:#332f29; --text-2:#403b34; --muted:#565148;
+  --border:#c6c0b4;
+  /* 底色变暗后，文字色也要跟着加深，否则对比度会掉到 AA 以下 */
+  --primary:#175791; --primary-d:#114472;
+  --success:#146238; --success-d:#0f4d2c; --danger:#a62727; --warn:#875008;
+  --fill-primary:#175791; --fill-primary-d:#114472;
+  --fill-success:#146238; --fill-success-d:#0f4d2c;
+  --fill-danger:#a62727;  --fill-warn:#875008;
+  --shadow:0 2px 10px rgba(60,52,38,.10); --shadow-l:0 4px 16px rgba(60,52,38,.15);
   --radius:12px;
 }
 html[data-theme="dark"]{
@@ -38,6 +42,19 @@ html[data-theme="dark"]{
   --fill-danger:#bf3b2c;  --fill-warn:#a9700d;
   --shadow:0 2px 12px rgba(0,0,0,.35); --shadow-l:0 6px 22px rgba(0,0,0,.45);
 }
+
+/* 难度标签、热力图、进度条这些小块的配色是当年按纯白底调的，亮度都在 85%~92%。
+   卡片降到 73% 之后它们反而比背景还亮，成了新的"亮点"。
+   统一压一档比重写十几个色值稳妥：brightness 会同时作用于底色和字色，对比度基本不变。 */
+html[data-theme="light"] .diff-tag,
+html[data-theme="light"] .hm-l1,
+html[data-theme="light"] .hm-l2,
+html[data-theme="light"] .hm-l3,
+html[data-theme="light"] .hm-l4,
+html[data-theme="light"] .progress-fill,
+html[data-theme="light"] .icpc-progress-fill,
+html[data-theme="light"] .contest-level,
+html[data-theme="light"] .tier-badge{filter:brightness(.9);}
 
 *{box-sizing:border-box;}
 body{max-width:1600px;margin:0 auto;padding:0 22px 60px;
