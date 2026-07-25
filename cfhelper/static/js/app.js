@@ -61,23 +61,17 @@ function showOverlay(tip) {
 }
 
 /* ==================== 大部队 ==================== */
+// 首页只处理单个用户，这里取输入框里的第一个名字（用户可能习惯性地打了逗号）
 function addCurrentToArmy() {
-  const val = document.getElementById('handlesInput').value.trim();
-  if (!val) { toast('请先输入用户名', 'err'); return; }
-  const handles = val.split(/[,，]/).map(h => h.trim()).filter(Boolean);
-  let done = 0, ok = 0;
-  handles.forEach(h => {
-    fetch('/api/add_army?handle=' + encodeURIComponent(h), { method: 'POST' })
-      .then(r => r.json())
-      .then(d => {
-        if (d.success) ok++; else toast(h + '：' + d.msg, 'err');
-      })
-      .finally(() => {
-        if (++done === handles.length) {
-          if (ok) { toast(`成功加入 ${ok} 名队友`, 'ok'); markNav(); setTimeout(() => location.reload(), 700); }
-        }
-      });
-  });
+  const handle = document.getElementById('handlesInput').value.split(/[,，]/)[0].trim();
+  if (!handle) { toast('请先输入用户名', 'err'); return; }
+  fetch('/api/add_army?handle=' + encodeURIComponent(handle), { method: 'POST' })
+    .then(r => r.json())
+    .then(d => {
+      toast(d.msg, d.success ? 'ok' : 'err');
+      if (d.success) { markNav(); setTimeout(() => location.reload(), 700); }
+    })
+    .catch(() => toast('加入失败', 'err'));
 }
 
 function removeMember(handle) {
@@ -119,29 +113,6 @@ function todoAdd(el) {
 function toggleDetails(handle) {
   const el = document.getElementById('details-' + handle);
   el.style.display = el.style.display === 'block' ? 'none' : 'block';
-}
-
-function _tbody() { return document.querySelector('#teamTable tbody'); }
-
-function sortByRating() {
-  const tb = _tbody();
-  Array.from(tb.rows)
-    .sort((a, b) => (+b.cells[1].dataset.sort) - (+a.cells[1].dataset.sort))
-    .forEach(r => tb.appendChild(r));
-  toast('已按 Rating 从高到低排序', 'info');
-}
-
-function filterByMedal() {
-  const tb = _tbody();
-  const groups = { gold: [], silver: [], bronze: [], other: [] };
-  Array.from(tb.rows).forEach(r => {
-    const k = r.classList.contains('gold') ? 'gold'
-      : r.classList.contains('silver') ? 'silver'
-        : r.classList.contains('bronze') ? 'bronze' : 'other';
-    groups[k].push(r);
-  });
-  [...groups.gold, ...groups.silver, ...groups.bronze, ...groups.other].forEach(r => tb.appendChild(r));
-  toast('已按奖牌分组（金→银→铜）', 'info');
 }
 
 function exportCSV() {

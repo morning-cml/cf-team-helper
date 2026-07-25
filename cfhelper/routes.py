@@ -169,29 +169,33 @@ def register(app):
         data, errors = [], []
         contest_type = "Div.2"
         prefill      = ""
+        notice       = ""
 
         if request.method == "POST":
-            handles      = request.form.get("handles", "").replace("，", ",").strip()
+            raw          = request.form.get("handles", "").replace("，", ",").strip()
             contest_type = request.form.get("contest_type", "Div.2")
-            prefill      = handles
-            hlist = [x.strip() for x in handles.split(",") if x.strip()]
-            valid   = [h for h in hlist if cf_api.is_valid_handle(h)]
-            errors += [h for h in hlist if not cf_api.is_valid_handle(h)]   # 非法格式直接判失败
-            # 多个用户并行分析（每人内部 3 接口又并行），整体受全局信号量限流
-            results = _parallel_map(lambda h: (h, _analyze_handle(h, contest_type)), valid)
-            for h, res in results:
-                (data.append(res) if res else errors.append(h))
+            hlist = [x.strip() for x in raw.split(",") if x.strip()]
+            # 首页专注单人深度分析；多人对比 / 组队分工各有专门页面，这里引导过去而不是报错
+            if len(hlist) > 1:
+                notice = (f"首页一次只分析一个人，已为你查询 {hlist[0]}。"
+                          f"要同时看多人：两人对比用 🆚 对比，整队分工用 🤝 组队作战。")
+            handle  = hlist[0] if hlist else ""
+            prefill = handle
+            if handle:
+                if not cf_api.is_valid_handle(handle):
+                    errors.append(handle)          # 非法格式直接判失败，省掉注定失败的请求
+                else:
+                    res = _analyze_handle(handle, contest_type)
+                    (data.append(res) if res else errors.append(handle))
 
-        # 取所有已查询用户的并集：多人查询时不该只按第一个人的等级来高亮
-        rec_levels = set()
-        for u in data:
-            rec_levels |= config.recommended_levels(u["rating"])
+        rec_levels = config.recommended_levels(data[0]["rating"]) if data else set()
 
         return render_template(
             "index.html",
             version           = config.APP_VERSION,
             data              = data,
             errors            = errors,
+            notice            = notice,
             contest_type      = contest_type,
             contest_types     = config.CONTEST_TYPES,
             prefill           = prefill,

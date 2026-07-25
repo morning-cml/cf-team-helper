@@ -60,7 +60,7 @@
 <div class="card">
   <form method="post" id="searchForm" class="search-box">
     <input type="text" name="handles" id="handlesInput" required value="{{ prefill }}"
-           placeholder="输入用户名，多个用逗号分隔，例：tourist, jiangly">
+           placeholder="输入一个 CF 用户名，例：tourist">
     <select name="contest_type" id="contestType">
       {% for ct in contest_types %}
       <option value="{{ ct }}" {{ 'selected' if contest_type==ct else '' }}>{{ ct }}</option>
@@ -71,24 +71,18 @@
   </form>
 </div>
 
+{% if notice %}
+<div class="alert alert-info">ℹ️ {{ notice }}</div>
+{% endif %}
+
 {% if errors %}
 <div class="alert">⚠️ 以下用户名查询失败（不存在或网络问题）：{{ errors|join('、') }}</div>
 {% endif %}
 
 {% if data %}
-<!-- 多用户锚点导航 -->
-{% if data|length > 1 %}
-<div class="user-nav">
-  <span class="muted" style="align-self:center;">跳转：</span>
-  {% for u in data %}<a href="#user-{{ u.handle }}">{{ u.handle }}</a>{% endfor %}
-</div>
-{% endif %}
-
-<!-- ==================== 团队总表 ==================== -->
+<!-- ==================== 数据总览 ==================== -->
 <div class="card">
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
-    <button class="btn-ghost" onclick="sortByRating()">📊 按 Rating 排序</button>
-    <button class="btn-ghost" onclick="filterByMedal()">🏅 按奖牌分组</button>
     <button class="btn-ghost" onclick="exportCSV()">⬇️ 导出 CSV</button>
   </div>
   <div class="table-wrap">
