@@ -1,13 +1,14 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-theme="light">
+<html lang="zh-CN" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{% block title %}CF 团队助手{% endblock %}</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 <script>
-  // 在渲染前就定好主题，避免深色模式刷新时白屏闪烁（FOUC）
-  (function () { try { document.documentElement.setAttribute('data-theme', localStorage.getItem('cf-theme') || 'light'); } catch (e) {} })();
+  // 在渲染前就定好主题，避免刷新时闪一下另一种配色（FOUC）。
+  // 默认深色；已手动切换过的用户仍沿用 localStorage 里的选择。
+  (function () { try { document.documentElement.setAttribute('data-theme', localStorage.getItem('cf-theme') || 'dark'); } catch (e) {} })();
 </script>
 </head>
 <body>

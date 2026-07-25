@@ -2,7 +2,7 @@
 
 /* ==================== 主题 ==================== */
 (function initTheme() {
-  const saved = localStorage.getItem('cf-theme') || 'light';
+  const saved = localStorage.getItem('cf-theme') || 'dark';   // 默认深色，与 base.html 的内联脚本保持一致
   document.documentElement.setAttribute('data-theme', saved);
   document.addEventListener('DOMContentLoaded', () => {
     const btn = document.getElementById('themeBtn');

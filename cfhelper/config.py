@@ -4,7 +4,7 @@
 这里只放纯数据，不依赖 Flask / requests，方便单独测试与复用。
 """
 
-APP_VERSION = "2.10"
+APP_VERSION = "2.11"
 
 # ==================== CF API 端点 ====================
 CF_API_BASE      = "https://codeforces.com/api"

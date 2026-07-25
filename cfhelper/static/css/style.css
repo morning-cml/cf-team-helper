@@ -1,16 +1,41 @@
-/* ==================== 主题变量 ==================== */
+﻿/* ==================== 主题变量 ====================
+   默认深色（base.html 里也写死了 data-theme="dark"，两处要一致）。
+
+   浅色配色的三条原则 —— 之前"太刺眼"主要就是踩了第一条：
+   1. 大面积不用纯白。卡片原本是 #ffffff，满屏白底是眩光的主要来源；
+      改成米白，并让页面底色比卡片略深，靠明度差建立层次而不是靠"卡片更白"。
+   2. 正文不用近黑。#333 配纯白对比度过高，长时间看容易累，改成深板岩灰。
+   3. 强调色降饱和。#3498db 这类高饱和纯色在浅底上很跳，同时白字配它
+      对比度只有 3:1 达不到 AA；调深后既柔和又达标。
+   深色模式仍沿用原来的高饱和语义色（在暗底上反而需要够亮），故在下面单独覆盖。
+*/
+/* 语义色分成两套，别混用（这是原本对比度不达标的根因）：
+   --primary/--success/... 是**文字色**，要在页面底色上够清楚；
+   --fill-*                是**填充色**（按钮、徽章、Toast 的底），要暗到配得住白字。
+   深色模式下这两者诉求相反——链接要更亮、按钮底要更暗——一个变量满足不了。 */
 :root{
-  --bg:#f5f7fa; --bg-elev:#ffffff; --bg-soft:#f8f9fa;
-  --text:#2c3e50; --text-2:#333; --muted:#6c757d;
-  --border:#e8ecef; --primary:#3498db; --primary-d:#2980b9;
-  --success:#2ecc71; --success-d:#27ae60; --danger:#e74c3c; --warn:#f39c12;
-  --shadow:0 2px 12px rgba(0,0,0,.06); --shadow-l:0 4px 18px rgba(0,0,0,.10);
+  --bg:#e8ecf1; --bg-elev:#f6f8fb; --bg-soft:#edf1f6;
+  --text:#2b3542; --text-2:#39434f; --muted:#5f6b78;
+  --border:#d6dde6;
+  --primary:#1f6fb2; --primary-d:#17588f;
+  --success:#1a7f47; --success-d:#14663a; --danger:#c02e2e; --warn:#a3620e;
+  --fill-primary:#1f6fb2; --fill-primary-d:#17588f;
+  --fill-success:#1a7f47; --fill-success-d:#14663a;
+  --fill-danger:#c02e2e;  --fill-warn:#a3620e;
+  --shadow:0 2px 10px rgba(28,42,60,.07); --shadow-l:0 4px 16px rgba(28,42,60,.11);
   --radius:12px;
 }
 html[data-theme="dark"]{
   --bg:#0e1420; --bg-elev:#161f2e; --bg-soft:#1d2838;
   --text:#e6edf3; --text-2:#cbd5e1; --muted:#8b98a5;
-  --border:#26303f; --primary:#4aa3e8; --primary-d:#3a8fd4;
+  --border:#26303f;
+  /* 暗底上文字色需要够亮才看得清 */
+  --primary:#4aa3e8; --primary-d:#3a8fd4;
+  --success:#2ecc71; --success-d:#27ae60; --danger:#ef5a4a; --warn:#f39c12;
+  /* 填充色则要够暗，否则白字糊在上面 */
+  --fill-primary:#2b6ca8; --fill-primary-d:#225787;
+  --fill-success:#1e8a4d; --fill-success-d:#186f3e;
+  --fill-danger:#bf3b2c;  --fill-warn:#a9700d;
   --shadow:0 2px 12px rgba(0,0,0,.35); --shadow-l:0 6px 22px rgba(0,0,0,.45);
 }
 
@@ -39,10 +64,10 @@ a:hover{text-decoration:underline;}
 .card h3{font-size:1.2em;}
 button{padding:11px 22px;border:none;border-radius:9px;font-size:.97em;font-weight:600;
   cursor:pointer;transition:.18s;font-family:inherit;}
-.btn-primary{background:var(--primary);color:#fff;}
-.btn-primary:hover{background:var(--primary-d);}
-.btn-success{background:var(--success);color:#fff;}
-.btn-success:hover{background:var(--success-d);}
+.btn-primary{background:var(--fill-primary);color:#fff;}
+.btn-primary:hover{background:var(--fill-primary-d);}
+.btn-success{background:var(--fill-success);color:#fff;}
+.btn-success:hover{background:var(--fill-success-d);}
 .btn-ghost{background:var(--bg-soft);color:var(--text);border:1px solid var(--border);}
 .btn-ghost:hover{background:var(--border);}
 .muted{color:var(--muted);}
@@ -50,8 +75,11 @@ button{padding:11px 22px;border:none;border-radius:9px;font-size:.97em;font-weig
 .down{color:var(--danger);font-weight:600;}
 
 /* ==================== 大部队 ==================== */
-.army-section{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;padding:24px;
-  border-radius:var(--radius);margin-bottom:22px;box-shadow:0 6px 20px rgba(102,126,234,.35);}
+/* 渐变整体压暗一档：原本的 #667eea→#764ba2 在浅色页面上过于跳眼 */
+.army-section{background:linear-gradient(135deg,#5a63c4,#634090);color:#fff;padding:24px;
+  border-radius:var(--radius);margin-bottom:22px;box-shadow:0 6px 20px rgba(90,99,196,.28);}
+html[data-theme="dark"] .army-section{background:linear-gradient(135deg,#4a52a8,#523579);
+  box-shadow:0 6px 20px rgba(0,0,0,.35);}
 .army-section h2{color:#fff;border:none;display:flex;align-items:center;gap:12px;}
 .army-head-btn{margin-left:auto;background:rgba(255,255,255,.2);color:#fff;
   border:1px solid rgba(255,255,255,.35);padding:8px 14px;font-size:.85em;}
@@ -72,13 +100,13 @@ button{padding:11px 22px;border:none;border-radius:9px;font-size:.97em;font-weig
 .filter-row{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 14px;}
 .chip{padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:var(--bg-soft);
   color:var(--text);cursor:pointer;font-size:.85em;font-weight:600;transition:.15s;}
-.chip.active{background:var(--primary);color:#fff;border-color:var(--primary);}
+.chip.active{background:var(--fill-primary);color:#fff;border-color:var(--fill-primary);}
 .contest-item{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:13px 15px;
   margin:9px 0;background:var(--bg-soft);border-radius:9px;border:1px solid var(--border);flex-wrap:wrap;}
 .contest-item.dimmed{display:none;}
 .contest-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
 .contest-level{display:inline-block;padding:3px 10px;border-radius:5px;color:#fff;font-size:.8em;font-weight:700;}
-.fit-badge{background:var(--warn);color:#fff;padding:2px 8px;border-radius:5px;font-size:.75em;font-weight:700;}
+.fit-badge{background:var(--fill-warn);color:#fff;padding:2px 8px;border-radius:5px;font-size:.75em;font-weight:700;}
 .lv-Div4{background:#95a5a6;}.lv-Div3{background:#2ecc71;}.lv-Div2{background:#3498db;}
 .lv-Div1{background:#e74c3c;}.lv-Div1Div2{background:#8e44ad;}.lv-Educational{background:#16a085;}
 .lv-Global{background:#e67e22;}.lv-other{background:#7f8c8d;}
@@ -144,7 +172,7 @@ tbody tr:hover{background:var(--bg-soft);}
   border-radius:8px;padding:12px 14px;transition:.15s;}
 .reco-card:hover{box-shadow:var(--shadow);transform:translateY(-2px);}
 .reco-name{font-weight:600;display:block;margin-bottom:5px;}
-.reco-rating{display:inline-block;background:var(--primary);color:#fff;padding:1px 8px;border-radius:10px;font-size:.78em;font-weight:700;}
+.reco-rating{display:inline-block;background:var(--fill-primary);color:#fff;padding:1px 8px;border-radius:10px;font-size:.78em;font-weight:700;}
 
 /* ==================== Rating 走势图 ==================== */
 .rating-chart{width:100%;margin-top:6px;}
@@ -185,7 +213,7 @@ tbody tr:hover{background:var(--bg-soft);}
 #toasts{position:fixed;right:22px;bottom:22px;z-index:1000;display:flex;flex-direction:column;gap:10px;}
 .toast{padding:13px 18px;border-radius:9px;color:#fff;font-weight:600;box-shadow:var(--shadow-l);
   animation:slidein .25s;min-width:200px;}
-.toast.ok{background:var(--success);}.toast.err{background:var(--danger);}.toast.info{background:var(--primary);}
+.toast.ok{background:var(--fill-success);}.toast.err{background:var(--fill-danger);}.toast.info{background:var(--fill-primary);}
 @keyframes slidein{from{transform:translateX(30px);opacity:0;}to{transform:none;opacity:1;}}
 
 /* ==================== 顶栏导航 ==================== */
@@ -194,7 +222,7 @@ tbody tr:hover{background:var(--bg-soft);}
 .topnav a{padding:7px 13px;border-radius:8px;font-weight:600;color:var(--text);font-size:.92em;
   border:1px solid transparent;}
 .topnav a:hover{background:var(--bg-soft);text-decoration:none;}
-.topnav a.active{background:var(--primary);color:#fff;}
+.topnav a.active{background:var(--fill-primary);color:#fff;}
 
 /* ==================== 弱点墙 ==================== */
 .wall{display:flex;flex-direction:column;gap:8px;margin-top:12px;}
@@ -279,7 +307,7 @@ table.vs-stat td:nth-child(2){color:var(--muted);font-size:.92em;}
   cursor:pointer;user-select:none;text-decoration:none;transition:transform .12s;}
 .star:hover{transform:scale(1.25);}
 .star.starred{color:#f1c40f;}
-.nav-badge{display:inline-block;background:var(--warn);color:#fff;border-radius:10px;
+.nav-badge{display:inline-block;background:var(--fill-warn);color:#fff;border-radius:10px;
   padding:0 6px;font-size:.78em;font-weight:700;}
 .todo-list{display:flex;flex-direction:column;gap:8px;margin-top:10px;}
 .todo-item{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:11px 14px;
@@ -322,7 +350,7 @@ table.vs-stat td:nth-child(2){color:var(--muted);font-size:.92em;}
   padding:0 5px;border-radius:5px;font-size:.8em;font-weight:700;text-decoration:none;
   border:1px solid var(--border);transition:transform .12s;}
 .pq:hover{transform:translateY(-2px);text-decoration:none;}
-.pq-solved{background:#2ecc71;color:#fff;border-color:#27ae60;}
+.pq-solved{background:var(--fill-success);color:#fff;border-color:var(--fill-success-d);}
 .pq-tried{background:rgba(231,76,60,.16);color:var(--danger);border-color:var(--danger);}
 .pq-none{background:var(--bg-elev);color:var(--muted);}
 .icpc-pct{font-size:.85em;color:var(--muted);margin-left:3px;}
