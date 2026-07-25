@@ -120,10 +120,9 @@
         {% else %}已解出 <b>{{ p.count }}</b> 题{% endif %}
         {% if p.tried %}<span class="icpc-tried-n">{{ p.tried }} 题未攻克</span>{% endif %}
       </span>
-      {% if p.total %}
-      <span class="icpc-bar"><i style="width:{{ p.pct }}%"></i></span>
-      {% endif %}
-      <!-- 逐题状态网格：绿=解出 红=交过没做出 灰=没碰过 -->
+      <!-- 逐题状态网格：绿=解出 红=交过没做出 灰=没碰过。
+           这里不再放完成度进度条——它表达的信息是下面这排方块的子集，
+           方块能精确到"哪几题解出、哪几题卡住"，进度条只是同一件事的模糊版本。 -->
       <span class="icpc-probs">
         {% for q in p.problems %}
         <a class="pq pq-{{ q.state }}" href="{{ q.url }}" target="_blank"
