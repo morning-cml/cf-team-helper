@@ -226,6 +226,17 @@ tbody tr:hover{background:var(--bg-soft);}
 .overlay .tip{color:#fff;margin-top:18px;font-size:1.05em;}
 @keyframes spin{to{transform:rotate(360deg);}}
 
+/* ==================== 反馈页 ==================== */
+.fb-privacy{margin:14px 0 4px;padding:13px 16px;border-radius:9px;font-size:.9em;line-height:1.7;
+  background:rgba(31,111,178,.10);border:1px solid var(--primary);color:var(--text-2);}
+.fb-privacy span{display:block;margin-top:5px;font-size:.95em;opacity:.9;}
+.fb-form{display:flex;flex-direction:column;gap:14px;margin-top:16px;}
+.fb-form textarea,.fb-preview{width:100%;padding:11px 13px;border:2px solid var(--border);
+  border-radius:8px;font-size:.94em;background:var(--bg-elev);color:var(--text);
+  font-family:inherit;line-height:1.65;resize:vertical;}
+.fb-form textarea:focus,.fb-preview:focus{outline:none;border-color:var(--primary);}
+.fb-preview{font-family:Consolas,'Courier New',monospace;font-size:.86em;margin-top:10px;}
+
 /* 后台进程没了时的顶部横幅：让用户一眼知道发生了什么，而不是点了才发现"找不到" */
 .dead-banner{position:fixed;left:0;right:0;top:0;z-index:1500;padding:12px 20px;
   background:var(--fill-danger);color:#fff;font-weight:600;line-height:1.6;

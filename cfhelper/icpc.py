@@ -163,6 +163,16 @@ def _collect(cn_only=True):
     return out
 
 
+def cached_contests():
+    """只读缓存里的比赛库，**不触发网络**。
+
+    反馈页要在"网络坏了"的时候也能打开——那恰恰是最需要提反馈的时刻，
+    所以它取诊断信息时不能走 get_contests（缓存过期时会去拉网络）。
+    """
+    cache = read_json(config.ICPC_CACHE_FILE)
+    return (cache or {}).get("contests") or []
+
+
 def get_contests(force=False, cn_only=True):
     """带缓存地取 ICPC 比赛库。历史赛事几乎不变，缓存周期比比赛日历长得多。"""
     cache = read_json(config.ICPC_CACHE_FILE)

@@ -413,6 +413,34 @@ def register(app):
                         "msg": f"已刷新，共收录 {len(items)} 场" if items
                                else "刷新失败，请检查网络"})
 
+    # ==================== 反馈 ====================
+    @app.route("/feedback")
+    def feedback():
+        """生成一条预填好的 GitHub issue 链接，由用户自己提交。
+
+        程序**不代为提交**：那需要把 token 打进 exe，而 exe 里的字符串是明文可提取的，
+        等于把仓库写权限发给每个下载者。这里只做"填好表格递给他"。
+        """
+        _touch()
+        # 只读缓存，不触发网络——网络坏掉时恰恰最需要能打开这一页
+        items = icpc.cached_contests()
+        st = icpc.problem_fetch_state(items)
+        total = st.get("total_contests", 0)
+        return render_template(
+            "feedback.html",
+            repo_url=config.REPO_URL,
+            url_limit=config.FEEDBACK_URL_LIMIT,
+            # 白名单式收集：只放排查必需、且与身份无关的项。
+            # 绝不含密钥、CF 用户名、题单内容、本地路径（路径会带出 Windows 用户名）。
+            diag={
+                "version":  config.APP_VERSION,
+                "has_key":  "是" if st.get("has_key") else "否",
+                "contests": total,
+                "problems": f"{st.get('covered', 0)}/{total}" if total else "未抓取",
+                "medals":   f"{st.get('medal_covered', 0)}/{total}" if total else "未抓取",
+            },
+        )
+
     # ==================== 题单 / 待做收藏 ====================
     @app.route("/todo")
     def todo_page():

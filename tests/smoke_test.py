@@ -589,6 +589,35 @@ def test_icpc_problem_list_states():
                 os.remove(p)
 
 
+def test_feedback_page_leaks_nothing():
+    """反馈页的自动收集必须是白名单式的：只放排查必需、与身份无关的项。
+
+    issue 是公开且基本永久的，一旦把 CF 用户名 / 密钥 / 本地路径带进去就收不回来。
+    这里把约束钉死，避免以后往诊断里"顺手多加一个字段"时踩雷。
+    """
+    import json
+    import re
+    from cfhelper import create_app
+    client = create_app().test_client()
+    r = client.get("/feedback")
+    assert r.status_code == 200
+    html = r.data.decode("utf-8")
+
+    # 服务端注入的诊断字段必须严格限定在这几项内
+    m = re.search(r'id="fbDiag">(.*?)</script>', html, re.S)
+    diag = json.loads(m.group(1))
+    assert set(diag) == {"version", "has_key", "contests", "problems", "medals"}, \
+        f"诊断字段被改动了，请先确认新字段不含身份信息：{set(diag)}"
+    assert diag["has_key"] in ("是", "否"), "密钥只能报有没有，绝不能报内容"
+
+    # 页面与前端脚本都不得出现绝对路径（会带出 Windows 用户名）
+    assert not re.search(r"[A-Za-z]:\\\\", html), "页面里出现了本地盘符路径"
+    js = client.get("/static/js/feedback.js").data.decode("utf-8")
+    assert "token" not in js.lower(), "反馈脚本里不该出现 token"
+    assert "fetch(" not in js, "反馈脚本不该向任何地址发请求——只生成链接交给用户"
+    assert "issues/new" in js, "应生成预填的 issue 链接"
+
+
 def test_state_changing_endpoints_guarded():
     """改状态的端点必须 POST-only 且拒绝跨站 Origin。
 

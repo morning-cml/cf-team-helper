@@ -4,7 +4,7 @@
 这里只放纯数据，不依赖 Flask / requests，方便单独测试与复用。
 """
 
-APP_VERSION = "2.16"
+APP_VERSION = "2.17"
 
 # ==================== CF API 端点 ====================
 CF_API_BASE      = "https://codeforces.com/api"
@@ -54,6 +54,14 @@ ICPC_MEDAL_PCT       = {"gold": 10, "silver": 30, "bronze": 60}
 # World Finals 是**固定名次**：前 4 金、5-10 银、11-20 铜。
 # 同样记累计上界（银 = 10 名以内，铜 = 20 名以内），与保底题数的算法口径一致。
 ICPC_MEDAL_WF_RANKS  = {"gold": 4, "silver": 10, "bronze": 20}
+# ==================== 反馈页 ====================
+# 仓库地址，用于生成**预填**的 issue 链接。
+# 这里刻意不放任何令牌：程序不自己提交 issue，只把填好的链接交给用户，
+# 由他用自己的 GitHub 账号点 Submit。凭据一旦打进 exe 就是明文可提取的，绝不能走那条路。
+REPO_URL             = "https://github.com/morning-cml/cf-team-helper"
+# 预填链接是放在 URL 里的，太长浏览器会截断，超过这个长度就引导用户改用「复制全文」。
+FEEDBACK_URL_LIMIT   = 7000
+
 ARMY_FILE            = "cf_army.json"
 TODO_FILE            = "cf_todo.json"           # 题单/待做收藏（跨会话保留）
 CACHE_EXPIRE_SECONDS = 3600          # 比赛列表缓存有效期

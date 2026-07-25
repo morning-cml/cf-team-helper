@@ -22,6 +22,7 @@
     <a href="/team"   class="{{ 'active' if request.path == '/team' else '' }}">🤝 组队作战</a>
     <a href="/vs"     class="{{ 'active' if request.path == '/vs' else '' }}">🆚 对比</a>
     <a href="/todo"   class="{{ 'active' if request.path == '/todo' else '' }}">⭐ 题单{% if todo_count %} <span class="nav-badge">{{ todo_count }}</span>{% endif %}</a>
+    <a href="/feedback" class="{{ 'active' if request.path == '/feedback' else '' }}">💬 反馈</a>
   </nav>
   <button class="icon-btn" id="themeBtn" title="切换深色/浅色">🌙</button>
 </div>
