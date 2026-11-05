@@ -1,0 +1,1154 @@
+# -*- coding: utf-8 -*-
+"""冒烟测试：纯函数（离线，秒级）+ 可选实网测试。
+
+用法：
+    python tests/smoke_test.py          # 仅离线纯函数测试
+    python tests/smoke_test.py --net     # 额外跑实网端到端测试
+"""
+import os
+import sys
+import time
+
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="backslashreplace")
+    except Exception:
+        pass
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from cfhelper import analysis, cf_api, config
+
+
+def test_rank_info():
+    ri = analysis.get_rank_info(1950)
+    assert ri["current_name"] == "候选大师"
+    assert ri["next_name"] == "大师"
+    assert ri["need_rating"] == 150
+    # CF 官方分段：Expert 1600-1899、Master 2100-2299、IM 2300-2399
+    assert analysis.get_rank_info(1850)["current_name"] == "专家"
+    assert analysis.get_rank_info(2250)["current_name"] == "大师"
+    assert analysis.get_rank_info(2300)["current_name"] == "国际大师"
+    assert analysis.get_rank_info(4000)["is_max"] is True
+
+
+def test_difficulty_band():
+    assert analysis.get_difficulty_band(800)["name"] == "入门"
+    assert analysis.get_difficulty_band(1500)["name"] == "中等+"
+    assert analysis.get_difficulty_band(3200)["name"] == "神级"
+
+
+def _fake_subs():
+    now = int(time.time())
+    return [
+        {"verdict": "WRONG_ANSWER", "creationTimeSeconds": now - 100,
+         "problem": {"contestId": 1, "index": "A", "tags": ["dp"], "rating": 1500, "name": "A"}},
+        {"verdict": "OK", "creationTimeSeconds": now - 90,
+         "problem": {"contestId": 1, "index": "A", "tags": ["dp"], "rating": 1500, "name": "A"}},
+        {"verdict": "WRONG_ANSWER", "creationTimeSeconds": now - 80,
+         "problem": {"contestId": 2, "index": "B", "tags": ["dp"], "rating": 1600, "name": "B"}},
+        {"verdict": "OK", "creationTimeSeconds": now - 70,
+         "problem": {"contestId": 3, "index": "C", "tags": ["greedy"], "rating": 900, "name": "C"}},
+        {"verdict": "OK", "creationTimeSeconds": now - 200 * 86400,
+         "problem": {"contestId": 4, "index": "D", "tags": ["math"], "rating": 2000, "name": "D"}},
+    ]
+
+
+def test_analyze_problems():
+    prob = analysis.analyze_problems(_fake_subs())
+    assert prob["ac"] == 3                 # A, C, D 去重
+    assert prob["rated_solved"] == 3
+
+
+def test_recent_ac_rate_not_zero():
+    """回归守护：旧版 ac_rate 恒为 0 的 bug 不能复现。"""
+    recent = analysis.analyze_recent_tags(_fake_subs())
+    assert recent["dp"]["total_submit"] == 2   # 近况尝试 A、B 两题
+    assert recent["dp"]["ac_count"] == 1       # 解出 A
+    assert recent["dp"]["ac_rate"] == 50.0     # 关键：不是 0
+    assert recent["greedy"]["ac_rate"] == 100.0
+    assert "math" not in recent               # 200 天前，超出窗口
+
+
+def test_prediction_shape():
+    pred = analysis.generate_prediction(1850, "Div.2")
+    assert set(pred.keys()) == set(range(0, 7))
+    assert all("new_rating" in v for v in pred.values())
+
+
+def test_solved_keys_of():
+    keys = analysis.solved_keys_of(_fake_subs())
+    assert keys == {"1_A", "3_C", "4_D"}     # 仅 OK 的去重题
+
+
+def _wall_subs():
+    now = int(time.time())
+    def s(v, cid, idx, r):
+        return {"verdict": v, "creationTimeSeconds": now,
+                "problem": {"contestId": cid, "index": idx, "tags": ["x"], "rating": r, "name": idx}}
+    return [s("OK", 1, "A", 900), s("OK", 2, "B", 1000),
+            s("WRONG_ANSWER", 2, "B", 1000),          # 同题，仍算解出
+            s("WRONG_ANSWER", 3, "C", 1600),          # 中等+ 尝试未解出
+            s("WRONG_ANSWER", 3, "C", 1600)]
+
+
+def test_weakness_wall():
+    w = analysis.analyze_weakness_wall(_wall_subs())
+    by = {r["name"]: r for r in w["rows"]}
+    assert by["简单"]["attempted"] == 2 and by["简单"]["solved"] == 2 and by["简单"]["rate"] == 100.0
+    # 尝试过但没解出 → 通过率是 0.0 而不是 None（分母含失败尝试，正是弱点墙的意义）
+    assert by["中等+"]["attempted"] == 1 and by["中等+"]["solved"] == 0 and by["中等+"]["rate"] == 0.0
+    assert w["rows"][0]["name"] == "入门"        # 输出顺序为易→难
+
+
+def test_pick_problems():
+    fake = [
+        {"key": "1_A", "contest_id": 1, "index": "A", "name": "A", "rating": 1200, "tags": ["dp"]},
+        {"key": "2_B", "contest_id": 2, "index": "B", "name": "B", "rating": 1400, "tags": ["greedy"]},
+        {"key": "3_C", "contest_id": 3, "index": "C", "name": "C", "rating": 1800, "tags": ["dp", "graphs"]},
+    ]
+    saved = list(cf_api.PROBLEMS)
+    cf_api.PROBLEMS[:] = fake
+    try:
+        r1 = analysis.pick_problems(1000, 1500, ["dp"], set(), mode="sorted")
+        assert [p["rating"] for p in r1] == [1200]                 # 区间+标签命中
+        r2 = analysis.pick_problems(1000, 2000, None, {"1_A"}, mode="sorted")
+        assert [p["rating"] for p in r2] == [1400, 1800]           # 排除已做过的 1_A
+    finally:
+        cf_api.PROBLEMS[:] = saved
+
+
+def test_analyze_team():
+    mk = lambda h, r, tc, sk: {"handle": h, "rating": r,
+                               "rank_info": analysis.get_rank_info(r),
+                               "tag_counts": tc, "solved_keys": sk}
+    members = [mk("A", 1500, {"dp": 10, "greedy": 2}, {"1_A", "2_B"}),
+               mk("B", 1600, {"dp": 3, "greedy": 8}, {"2_B", "3_C"})]
+    team = analysis.analyze_team(members)
+    assert team["union_size"] == 3                                 # {1_A,2_B,3_C}
+    best = {r["tag"]: r["best"] for r in team["matrix"]}
+    assert best["dp"] == "A" and best["greedy"] == "B"             # 各标签最强者
+    assert "dp" in team["assignment"]["A"] and "greedy" in team["assignment"]["B"]
+
+
+def test_valid_handle():
+    ok = cf_api.is_valid_handle
+    assert ok("tourist") and ok("a_b-c.d") and ok("X1")
+    assert not ok("") and not ok("a b") and not ok("a,b") and not ok("x" * 25)
+
+
+def test_analyze_handle_error_isolated():
+    """单人分析内部异常应被吞成 None（不连累并行里的其他人 / 整页 500）。"""
+    import cfhelper.routes as routes
+    orig = cf_api.fetch_user_bundle
+    cf_api.fetch_user_bundle = lambda h: (_ for _ in ()).throw(RuntimeError("boom"))
+    try:
+        assert routes._analyze_handle("whoever", "Div.2") is None
+        assert routes._fetch_member("whoever") is None
+    finally:
+        cf_api.fetch_user_bundle = orig
+
+
+def test_weakness_wall_target():
+    now = int(time.time())
+    def s(v, cid, idx, r):
+        return {"verdict": v, "creationTimeSeconds": now,
+                "problem": {"contestId": cid, "index": idx, "tags": ["x"], "rating": r, "name": idx}}
+    subs = [s("OK", i, "A", 900 + i * 10) for i in range(5)]          # 简单档 5 题全解出
+    subs += [s("WRONG_ANSWER", 100 + i, "B", 1300 + i * 10) for i in range(4)]  # 中等档 4 题
+    subs += [s("OK", 100, "B", 1300)]                                 # 其中 1 题解出 → 25%
+    w = analysis.analyze_weakness_wall(subs)
+    assert w["ceiling"] == "简单" and w["wall"] == "中等"
+    assert w["target_min"] == 1300 and w["target_max"] == 1499        # 深链给刷题器的目标分段
+
+
+def test_wall_needs_enough_attempts():
+    """回归守护：只碰过 1-2 题的档不能被判成「墙」。
+
+    旧版找墙的条件是 attempted > 0（WALL_MIN_ATTEMPTS 只卡了稳固上限），
+    于是"某档试了 2 题没做出来"就会被斩钉截铁地写进结论，让人照着改训练方向。
+    """
+    now = int(time.time())
+    def s(v, cid, r):
+        return {"verdict": v, "creationTimeSeconds": now,
+                "problem": {"contestId": cid, "index": "A", "tags": ["x"], "rating": r, "name": "A"}}
+
+    subs = [s("OK", i, 800) for i in range(6)]                 # 入门档 6 题全解出 → 稳固上限
+    subs += [s("WRONG_ANSWER", 100 + i, 1000) for i in range(2)]   # 简单档只碰 2 题，样本不足
+    w = analysis.analyze_weakness_wall(subs)
+    assert w["ceiling"] == "入门"
+    assert w["wall"] is None, "样本不足的档不该被判成墙"
+    assert str(config.WALL_MIN_ATTEMPTS) in w["verdict"]        # 结论里说明为什么没定出墙
+
+    subs += [s("WRONG_ANSWER", 200 + i, 1000) for i in range(2)]   # 补到 4 题 → 达到可信门槛
+    w2 = analysis.analyze_weakness_wall(subs)
+    assert w2["wall"] == "简单" and w2["target_min"] == 900 and w2["target_max"] == 1099
+
+
+def test_wall_target_within_problemset():
+    """回归守护：深链目标区间必须落在题库真实存在的难度内（800~3500）。
+
+    最高难度档的 max 是 9999（分档开口，题库里并没有这么难的题）。旧版无墙时用
+    ceiling.max + 1，对练到顶档的用户会算出 10000~10199，点过去必然出 0 道题。
+    """
+    now = int(time.time())
+    subs = [{"verdict": "OK", "creationTimeSeconds": now,
+             "problem": {"contestId": i, "index": "A", "tags": ["x"], "rating": 3200, "name": "A"}}
+            for i in range(6)]                                  # 神级档 6 题全解出，其上再无档位
+    w = analysis.analyze_weakness_wall(subs)
+    assert w["ceiling"] == "神级" and w["wall"] is None
+    assert w["target_min"] <= w["target_max"], "目标区间倒挂"
+    assert config.MIN_PROBLEM_RATING <= w["target_min"] <= config.MAX_PROBLEM_RATING
+    assert config.MIN_PROBLEM_RATING <= w["target_max"] <= config.MAX_PROBLEM_RATING
+
+    # 任何 ceiling/wall 组合下目标区间都不能越界
+    for r in (800, 1000, 1500, 2000, 2800, 3200):
+        subs = [{"verdict": "OK", "creationTimeSeconds": now,
+                 "problem": {"contestId": i, "index": "A", "tags": ["x"], "rating": r, "name": "A"}}
+                for i in range(6)]
+        t = analysis.analyze_weakness_wall(subs)
+        assert t["target_min"] <= t["target_max"] <= config.MAX_PROBLEM_RATING, f"rating={r} 越界"
+
+
+def test_pick_with_total():
+    fake = [{"key": "1_A", "contest_id": 1, "index": "A", "name": "A", "rating": 1200, "tags": ["dp"]},
+            {"key": "2_B", "contest_id": 2, "index": "B", "name": "B", "rating": 1300, "tags": ["dp"]}]
+    saved = list(cf_api.PROBLEMS)
+    cf_api.PROBLEMS[:] = fake
+    try:
+        lst, total = analysis.pick_problems(1000, 2000, ["dp"], set(), mode="sorted", with_total=True)
+        assert total == 2 and len(lst) == 2
+    finally:
+        cf_api.PROBLEMS[:] = saved
+
+
+def _cmp_user(handle, rating, ac, tags, solved, hist, rh):
+    return {"handle": handle, "rating": rating, "max_rating": rating + 100, "medal_class": "",
+            "rank_info": analysis.get_rank_info(rating), "ac": ac, "submit": ac * 2, "rate": 50.0,
+            "histogram": hist, "tags": tags, "solved_keys": solved, "rating_history": rh}
+
+
+def test_compare_users():
+    hist = [{"name": "中等", "cls": "d-med1", "desc": "1300-1499", "count": 5}]
+    def rh(pairs):   # pairs: [(contest_id, rank)]
+        return [{"contest_id": cid, "name": f"R{cid}", "rank": rk, "old_rating": 1500,
+                 "new_rating": 1520, "rating_change": 20, "time": 1000 + cid} for cid, rk in pairs]
+    a = _cmp_user("A", 1600, 50, [("dp", 10), ("greedy", 2)], {"1_A", "2_B"}, hist, rh([(1, 10), (2, 50)]))
+    b = _cmp_user("B", 1550, 40, [("dp", 3), ("greedy", 8), ("math", 4)], {"2_B", "3_C"}, hist, rh([(1, 20), (2, 30)]))
+    cmp = analysis.compare_users(a, b)
+    assert cmp["contests"]["shared"] == 2 and cmp["contests"]["a_wins"] == 1 and cmp["contests"]["b_wins"] == 1
+    assert cmp["solved"] == {"common": 1, "only_a": 1, "only_b": 1}
+    leader = {t["tag"]: t["leader"] for t in cmp["tags"]}
+    assert leader["dp"] == "a" and leader["greedy"] == "b" and leader["math"] == "b"
+    assert cmp["stat_rows"][0]["winner"] == "a"        # A(1600) Rating 高
+    assert cmp["chart_a"] and cmp["chart_b"]            # 双线走势数据透传
+    rows = {r["label"]: r for r in cmp["stat_rows"]}
+    assert rows["最好名次"]["a"] == 10 and rows["最好名次"]["winner"] == "a"   # 名次小者胜
+    assert rows["单场最大掉分"]["a"] == "—"            # 从没掉过分 → 不编一个 0 出来
+    # 首场 oldRating=0，那一场的"涨分"是整个初始分，不能算进最大涨分
+    first = [{"contest_id": 9, "name": "R9", "rank": 99, "old_rating": 0, "new_rating": 1417,
+              "rating_change": 1417, "time": 1}]
+    a_first = _cmp_user("A", 1600, 50, [("dp", 1)], {"1_A"}, hist, first + rh([(1, 10)]))
+    rows = {r["label"]: r for r in analysis.compare_users(a_first, b)["stat_rows"]}
+    assert rows["单场最大涨分"]["a"] == 20
+
+    # 一方没打过比赛：不能崩，也不能判胜负
+    b_new = _cmp_user("B", 0, 40, [("dp", 3)], {"3_C"}, hist, [])
+    rows = {r["label"]: r for r in analysis.compare_users(a, b_new)["stat_rows"]}
+    assert rows["最好名次"]["b"] == "—" and rows["最好名次"]["winner"] == "tie"
+
+
+def test_one_shot_count():
+    """一次通过：只看每题最早那一发；编译错误不算一次尝试（与 CF 罚时口径一致）。"""
+    mk = lambda cid, v, t: {"verdict": v, "creationTimeSeconds": t,
+                            "problem": {"contestId": cid, "index": "A", "name": f"P{cid}"}}
+    subs = [mk(1, "OK", 10),                                          # 一发过
+            mk(2, "WRONG_ANSWER", 10), mk(2, "OK", 20),               # 先 WA 后过
+            mk(3, "COMPILATION_ERROR", 10), mk(3, "OK", 20),          # CE 不算
+            mk(4, "WRONG_ANSWER", 10)]                                # 没过
+    assert analysis.one_shot_count(subs) == 2
+
+
+def test_activity_heatmap():
+    now, day = int(time.time()), 86400
+    subs = [{"verdict": "OK", "creationTimeSeconds": now,
+             "problem": {"contestId": i, "index": "A", "tags": [], "rating": 1000, "name": "x"}}
+            for i in range(5)]                                # 今天解出 5 道不同题
+    subs.append({"verdict": "OK", "creationTimeSeconds": now - day,
+                 "problem": {"contestId": 99, "index": "B", "tags": [], "rating": 1000, "name": "y"}})
+    hm = analysis.activity_heatmap(subs)
+    assert hm["total"] == 6 and hm["active_days"] == 2
+    assert hm["longest_streak"] == 2 and hm["current_streak"] == 2
+    assert hm["max_day"]["count"] == 5
+    assert all(len(wk) == 7 for wk in hm["weeks"])            # 每列补齐 7 格
+    valid = [c for wk in hm["weeks"] for c in wk if c]
+    assert max(c["c"] for c in valid) == 5 and any(c["lv"] == 3 for c in valid)   # 5 题/天 → lv3
+
+
+def test_todo_crud():
+    from cfhelper import todo
+    from cfhelper.paths import data_path
+    orig = config.TODO_FILE
+    config.TODO_FILE = "cf_todo_test.json"
+    path = data_path(config.TODO_FILE)
+    try:
+        if os.path.exists(path):
+            os.remove(path)
+        assert todo.add("1850_A", "Test", 1200, ["dp"])[0] is True
+        assert len(todo.load()) == 1 and todo.load()[0]["url"].endswith("/problem/1850/A")
+        assert todo.add("1850_A", "Test", 1200, [])[0] is False     # 去重
+        assert todo.add("bad", "X")[0] is False                     # key 非法
+        assert todo.toggle("1850_A")[0] is True and todo.load()[0]["done"] is True
+        assert todo.clear_done() == 1 and todo.load() == []
+        assert todo.remove("zzz")[0] is False                       # 不存在
+    finally:
+        config.TODO_FILE = orig
+        if os.path.exists(path):
+            os.remove(path)
+
+
+def test_training_plan_low_and_unrated():
+    """回归守护：低分 / 未评级用户的训练区间不能倒挂，推荐题不能恒为空。
+
+    旧版对 rating=0（CF 未评级不返回 rating 字段）算出 comfort = 800 ~ -200，
+    improve = -200 ~ 300；routes 再取 max(800, min) 后变成 lo=800 > hi=300，
+    推荐池 lo<=r<=hi 恒为空集。rating < 1000 的真实用户同样会倒挂。
+    """
+    fake = [{"key": f"{i}_A", "contest_id": i, "index": "A", "name": f"P{i}",
+             "rating": r, "tags": ["dp"]}
+            for i, r in enumerate(range(800, 2001, 100), start=1)]
+    saved = list(cf_api.PROBLEMS)
+    cf_api.PROBLEMS[:] = fake
+    try:
+        for rating in (0, 800, 900, 1000, 1100, 1400, 2000):
+            plan = analysis.generate_training_plan(rating, {})
+            for name, z in plan["zones"].items():
+                assert z["min"] <= z["max"], f"rating={rating} 的 {name} 区间倒挂"
+                assert z["min"] >= config.MIN_PROBLEM_RATING, f"rating={rating} 的 {name} 下界低于题库最低分"
+            imp = plan["zones"]["improve"]
+            recos = analysis.recommend_problems(imp["min"], imp["max"], plan["weak_tags"], set())
+            assert recos, f"rating={rating} 推荐题为空"
+    finally:
+        cf_api.PROBLEMS[:] = saved
+
+    unrated = analysis.generate_training_plan(0, {})
+    assert unrated["unrated"] is True
+    assert unrated["plan_rating"] == config.UNRATED_PLAN_RATING     # 未评级按基准分规划
+    rated = analysis.generate_training_plan(1500, {})
+    assert rated["unrated"] is False and rated["plan_rating"] == 1500
+
+
+def test_atomic_json_and_corrupt_backup():
+    """原子写 + 损坏留痕：看门狗 os._exit 撞上写入不能留下残缺文件，
+    而已损坏的文件必须备份成 .bad，不能被下一次保存静默覆盖掉。"""
+    from cfhelper.paths import atomic_write_json, data_path, read_json
+    name = "cf_atomic_test.json"
+    path = data_path(name)
+    for p in (path, path + ".tmp", path + ".bad"):
+        if os.path.exists(p):
+            os.remove(p)
+    try:
+        assert read_json(name, []) == []                    # 文件不存在 = 正常首次运行
+        atomic_write_json(name, [{"handle": "tourist"}])
+        assert read_json(name, []) == [{"handle": "tourist"}]
+        assert not os.path.exists(path + ".tmp")            # 临时文件已被 replace 掉
+
+        with open(path, "w", encoding="utf-8") as f:        # 模拟硬退出留下的残缺 JSON
+            f.write('[{"handle": "tou')
+        assert read_json(name, []) == []                    # 读不动 → 返回默认
+        assert os.path.exists(path + ".bad"), "损坏文件必须备份，否则数据静默丢失"
+        assert not os.path.exists(path), "损坏文件应已被移走"
+    finally:
+        for p in (path, path + ".tmp", path + ".bad"):
+            if os.path.exists(p):
+                os.remove(p)
+
+
+def test_icpc_classify():
+    """ICPC 四档分类：用实测踩过的真实比赛名做回归。
+
+    这些名字全部取自 CF 线上数据，每一条都对应一个曾经分错的坑。
+    """
+    from cfhelper import icpc
+    cases = [
+        # —— 应当排除 ——
+        ("2019 Google Code Jam World Finals (GCJ 19 World Finals)", None),   # 名字带 World Finals 但非 ICPC
+        ("2013-2014 CT S01E04: 2013 Kashan Contest + Some Problems of 2009 GCJ", None),
+        ("2025 Xian Jiaotong University Programming Contest", None),        # 只是名字带城市的校赛
+        ("Dalian University of Technology, Software College 2025 Freshman Contest", None),
+        ("The 2025 CCPC Harbin Onsite Warmup", None),                       # 热身赛不是正赛
+        ("2016-2017 National Taiwan University World Final Team Selection Contest", None),
+        ("[Unofficial Mirror] 2026 CCPC National Invitational (Nanchang)", None),
+        # —— 训练赛后缀不得误杀正赛 ——
+        ("The 2021 ICPC Asia Nanjing Regional Contest (XXII Open Cup, Grand Prix of Nanjing)", "regional"),
+        ("The 2024 ICPC Asia Hangzhou Regional Contest (The 3rd Universal Cup. Stage 25)", "regional"),
+        # —— 站点赛的两种命名 ——
+        ("2020 ICPC Shanghai Site", "regional"),
+        ("The 2024 ICPC Asia Nanjing Regional Contest", "regional"),
+        ("2024 China Collegiate Programming Contest (CCPC) Jinan Site", "regional"),
+        ("CCPC 2016-2017, Finals", "regional"),
+        ("2016-2017 ACM-ICPC CHINA-Final", "regional"),
+        # —— 其余三档 ——
+        ("2023 ICPC World Finals", "wf"),
+        ("2021 ICPC Asia East Continent Final", "ecfinal"),
+        ("2017-2018 ACM-ICPC Asia East Continent League Final (ECL-Final 2017)", "ecfinal"),
+        ("The 21st Hunan Provincial Collegiate Programming Contest", "provincial"),
+        ("2026 National Invitational of CCPC (Fujian)", "provincial"),
+    ]
+    for name, want in cases:
+        got = icpc.classify(name)
+        assert got == want, f"{name!r} 期望 {want}，实得 {got}"
+
+
+def test_icpc_progress_merge():
+    """完成度合并：gym 场没有分母，正式场有；多人取并集且保留各自明细。"""
+    from cfhelper import icpc
+    contests = [{"id": 900001, "name": "gym 场", "tier": "regional", "gym": True,
+                 "year": 2024, "start_ts": 0, "url": ""},
+                {"id": 1234, "name": "官方场", "tier": "wf", "gym": False,
+                 "year": 2024, "start_ts": 0, "url": ""}]
+    saved = list(cf_api.PROBLEMS)
+    cf_api.PROBLEMS[:] = [{"key": f"1234_{i}", "contest_id": 1234, "index": i,
+                           "name": i, "rating": 2000, "tags": []} for i in "ABCD"]
+    try:
+        a = {900001: {"solved": ["A", "C"], "tried": ["A", "C"], "names": {}},
+             1234:   {"solved": ["A"], "tried": ["A", "B"], "names": {}}}   # B 交过没做出
+        b = {900001: {"solved": ["C", "D"], "tried": ["C", "D"], "names": {}}}
+        prog = icpc.merge_progress(contests, [("alice", a), ("bob", b)])
+
+        gym = prog[900001]
+        assert gym["solved"] == ["A", "C", "D"] and gym["count"] == 3   # 并集去重
+        assert gym["total"] is None and gym["pct"] is None              # gym 无题单
+        assert gym["by_handle"] == {"alice": ["A", "C"], "bob": ["C", "D"]}
+        assert gym["known"] is False                                    # 没题单 -> 只列做过的
+        assert [q["i"] for q in gym["problems"]] == ["A", "C", "D"]
+
+        off = prog[1234]
+        assert off["total"] == 4 and off["count"] == 1 and off["pct"] == 25   # 官方场有分母
+        assert off["tried"] == 1 and off["known"] is True                # B 交过但没做出来
+        states = {q["i"]: q["state"] for q in off["problems"]}
+        assert states == {"A": "solved", "B": "tried", "C": "none", "D": "none"}
+        assert off["problems"][0]["who"] == ["alice"]                    # 谁做出来的
+        assert off["problems"][0]["url"].endswith("/contest/1234/problem/A")
+
+        stats = {s["name"]: s for s in icpc.progress_stats(contests, prog)}
+        assert stats["区域赛"]["touched"] == 1 and stats["区域赛"]["solved"] == 3
+        assert stats["EC-Final"]["touched"] == 0                        # 没碰过的档为 0
+    finally:
+        cf_api.PROBLEMS[:] = saved
+
+
+def test_icpc_pick_contest():
+    """抽取比赛的三条规则：没解出过的优先、超线的排除、都做过则一视同仁。"""
+    from cfhelper import icpc
+
+    def ct(cid, tier="regional"):
+        return {"id": cid, "name": f"C{cid}", "tier": tier, "gym": True,
+                "year": 2024, "start_ts": 0, "url": ""}
+
+    def pg(count, total, pct):
+        return {"solved": [], "count": count, "tried": 0, "total": total,
+                "pct": pct, "by_handle": {}, "problems": [], "known": True}
+
+    contests = [ct(1), ct(2), ct(3), ct(4), ct(5), ct(9, "wf")]
+
+    # 1) 有"一题没解出"的场次时，只从它们里面抽（1、2 没有进度记录 -> fresh）
+    prog = {3: pg(2, 10, 20), 4: pg(9, 10, 90), 5: pg(6, 10, 60)}
+    for _ in range(30):
+        picked, info = icpc.pick_contest(contests, prog, tier="regional")
+        assert picked["id"] in (1, 2), f"应只从没解出过的里抽，实得 {picked['id']}"
+    assert info["source"] == "fresh" and info["fresh"] == 2
+    assert info["mastered"] == 1                    # 只有 90% 的那场被排除
+    assert info["total"] == 5                       # wf 那场不在本档
+
+    # 2) 恰好 60% 不算超线（要求是"超过 60%"），90% 才排除
+    prog_all = {1: pg(1, 10, 10), 2: pg(1, 10, 10), 3: pg(2, 10, 20),
+                4: pg(9, 10, 90), 5: pg(6, 10, 60)}
+    ids = {icpc.pick_contest(contests, prog_all, "regional")[0]["id"] for _ in range(60)}
+    assert 5 in ids, "恰好 60% 不该被排除"
+    assert 4 not in ids, "90% 应被排除"
+
+    # 3) 全都做过时一视同仁，源标记为 partial
+    _, info = icpc.pick_contest(contests, prog_all, "regional")
+    assert info["source"] == "partial" and info["fresh"] == 0 and info["partial"] == 4
+
+    # 4) 交过但一题没解出 -> 仍算没做过
+    prog_tried = {1: {"solved": [], "count": 0, "tried": 3, "total": 10, "pct": 0,
+                      "by_handle": {}, "problems": [], "known": True}}
+    picked, info = icpc.pick_contest(contests, prog_tried, "regional")
+    assert info["fresh"] == 5 and picked["id"] in (1, 2, 3, 4, 5)
+
+    # 5) 题单未知（pct=None）算不出比例，不能证明超线 -> 保留
+    prog_unknown = {1: pg(1, 10, 10), 2: pg(1, 10, 10), 3: pg(2, 10, 20),
+                    4: pg(9, 10, 90),
+                    5: {"solved": [], "count": 8, "tried": 0, "total": None,
+                        "pct": None, "by_handle": {}, "problems": [], "known": False}}
+    ids = {icpc.pick_contest(contests, prog_unknown, "regional")[0]["id"] for _ in range(60)}
+    assert 5 in ids, "题单未知的场次不该被当成已吃透而排除"
+
+    # 6) 整档都超线 -> 抽不出来，返回 None 而不是报错
+    all_done = {i: pg(9, 10, 90) for i in (1, 2, 3, 4, 5)}
+    picked, info = icpc.pick_contest(contests, all_done, "regional")
+    assert picked is None and info["mastered"] == 5 and info["pool"] == 0
+
+    # 7) 不限档位时跨档抽取
+    picked, info = icpc.pick_contest(contests, {}, tier=None)
+    assert info["total"] == 6 and picked is not None
+
+
+def test_icpc_medal_dist():
+    """榜单 -> 解题数分布：只认赛场队伍（ghost）。
+
+    存分布而非算好的奖牌线，是为了改奖牌比例时不用重拉 160 场榜单。
+    """
+    from cfhelper import icpc
+
+    def rows(dist, ghost=True):
+        out = []
+        for solved, n in dist.items():
+            out += [{"points": solved, "party": {"ghost": ghost}}] * n
+        return out
+
+    d = icpc.medal_dist(rows({9: 2, 5: 8}))
+    assert d["teams"] == 10 and d["dist"] == {"9": 2, "5": 8}
+
+    # 练习者（非 ghost）不能参与计算——否则等于拿练习成绩定奖牌线
+    assert icpc.medal_dist(rows({12: 50}, ghost=False)) is None
+    mixed = icpc.medal_dist(rows({9: 2, 5: 8}) + rows({13: 99}, ghost=False))
+    assert mixed["teams"] == 10 and "13" not in mixed["dist"]
+    assert icpc.medal_dist([]) is None
+
+
+def test_icpc_medal_lines():
+    """奖牌线：两套名次规则 + 保底口径 + 退化情形。"""
+    from cfhelper import icpc
+
+    def entry(dist):
+        return {"teams": sum(dist.values()), "dist": {str(k): v for k, v in dist.items()}}
+
+    # —— 一般赛事：前 10% 金 / 前 30% 银 / 前 60% 铜（累计口径）——
+    # 100 队 -> 金线 10 名、银线 30 名、铜线 60 名。累计人数：
+    #   >=7 共 8 支 <=10 -> 金 7
+    #   >=6 共 18 支 <=30 -> 银 6（>=5 有 33 支，超了 30，所以 5 不稳）
+    #   >=5 共 33 支 <=60 -> 铜 5（>=4 有 63 支，超了 60，所以 4 不稳）
+    m = icpc.medal_lines(entry({9: 2, 8: 3, 7: 3, 6: 10, 5: 15, 4: 30, 3: 37}), tier="regional")
+    assert m["teams"] == 100 and m["champion"] == 9 and m["wf"] is False
+    assert m["gold"] == 7
+    assert m["silver"] == 6, "5 题和 6 题都可能拿银时，应报保底的 6"
+    assert m["bronze"] == 5, "前 60% 是铜牌线（累计口径）"
+
+    # —— World Finals：固定名次，前 4 金 / 5-10 银 / 11-20 铜 ——
+    # 130 队。>=10 的 3 支 <=4 -> 金 10；>=9 的 9 支 <=10 -> 银 9；>=8 的 19 支 <=20 -> 铜 8
+    wf = entry({11: 1, 10: 2, 9: 6, 8: 10, 7: 20, 6: 40, 5: 51})
+    w = icpc.medal_lines(wf, tier="wf")
+    assert w["champion"] == 11 and w["wf"] is True
+    assert (w["gold"], w["silver"], w["bronze"]) == (10, 9, 8)
+    # 同一份数据按百分位算会完全不同 —— 证明两套规则确实分开了
+    r = icpc.medal_lines(wf, tier="regional")
+    assert (r["gold"], r["silver"], r["bronze"]) != (10, 9, 8)
+
+    # 榜首并列：冠军取榜首实际题数（是事实，不是推算）
+    assert icpc.medal_lines(entry({11: 5, 10: 20, 9: 75}))["champion"] == 11
+
+    # 全员同分：没有任何题数能"稳"进前 10%，金牌线为 None，调用方需容忍
+    flat = icpc.medal_lines(entry({4: 50}))
+    assert flat["champion"] == 4 and flat["gold"] is None
+
+    # 旧格式缓存（只存了线、没存分布）应被视为待重抓
+    assert icpc.medal_lines({"teams": 9, "champion": 9, "gold": 7}) is None
+    assert icpc.medal_lines(None) is None and icpc.medal_lines({}) is None
+
+
+def test_cf_api_signature():
+    """CF 签名算法：apiSig = <rand> + sha512(<rand>/<method>?<字典序参数>#<secret>)。
+
+    用固定输入自己算一遍比对，确保参数排序 / 拼接格式没写错——签名错了
+    CF 只回一句含糊的 FAILED，很难从现象反推。
+    """
+    import hashlib
+    p = cf_api._sign("contest.standings", {"contestId": 105255, "from": 1, "count": 1},
+                     "KEY123", "SECRET456")
+    assert p["apiKey"] == "KEY123" and "time" in p
+    sig = p.pop("apiSig")
+    rand = sig[:6]
+    query = "&".join(f"{k}={v}" for k, v in sorted(p.items(), key=lambda kv: (kv[0], str(kv[1]))))
+    want = hashlib.sha512(f"{rand}/contest.standings?{query}#SECRET456".encode()).hexdigest()
+    assert sig[6:] == want, "签名与手工计算不一致"
+    # 参数必须按字典序，apiKey 应排在 contestId 之前
+    assert query.index("apiKey") < query.index("contestId") < query.index("count")
+
+
+def test_rating_matches_real_contest():
+    """官方涨分算法：拿三场真实比赛当标准答案回归。
+
+    fixture 里存的是 contest.ratingChanges 的产物——它同时给了输入（rank + oldRating）
+    和标准答案（newRating − oldRating），所以这是自带 ground truth 的回归。
+    用例只取赛前打过 **≥16 场**的老选手：CF 对参赛场次少的账号有加速收敛的处理，
+    不在公开算法里（实测 2-3 场的账号中位差 +98），拿新号来断言只会测出噪声。
+
+    阈值放得比实测宽一档（实测平均绝对误差 3.4/6.7/7.4）：这几个数会随 CF 调参轻微漂移，
+    卡太死会变成假报警。但真写错了误差是几十上百的量级，照样拦得住。
+    """
+    import json
+    import statistics
+    from cfhelper import rating
+    here = os.path.dirname(os.path.abspath(__file__))
+    checked = 0
+    for cid in (2258, 2149, 2147):
+        path = os.path.join(here, "fixtures", f"rating_{cid}.json")
+        with open(path, encoding="utf-8") as f:
+            fx = json.load(f)
+        field = rating.Field(fx["hist"])
+        assert field.size == fx["participants"], "直方图人数与比赛人数对不上"
+        errs = [field.delta(c["rank"], c["rating"]) - c["delta"] for c in fx["cases"]]
+        n = len(errs)
+        mae = sum(abs(e) for e in errs) / n
+        med = statistics.median(errs)
+        within20 = sum(1 for e in errs if abs(e) <= 20) / n
+        assert abs(med) <= 10, f"{fx['name']}: 误差中位数 {med}，算法本体多半错了"
+        assert mae <= 12, f"{fx['name']}: 平均绝对误差 {mae:.1f} 太大"
+        assert within20 >= 0.9, f"{fx['name']}: 只有 {within20:.0%} 落在 ±20 内"
+        checked += n
+    assert checked == 120, f"回归用例数变了（{checked}），fixture 是不是被改过？"
+
+    # 表现分必须随名次单调递减。这里最容易出的事是二分踩进"远高于全场"的非单调区间，
+    # 那一段 delta 会突然从 +48 跳到 +2298，表现分随之乱序（rank_to_rating 里有防呆）。
+    field = rating.Field({1200: 1000, 1600: 1000, 2000: 1000})
+    perfs = [field.performance(r) for r in (1, 10, 100, 1000, 2500)]
+    assert perfs == sorted(perfs, reverse=True), f"表现分随名次不单调：{perfs}"
+    assert 2000 < perfs[0] <= config.RATING_SEARCH_MAX, f"第 1 名的表现分不合理：{perfs[0]}"
+    # 全场 3000 人、名次垫底，表现分不该跌破搜索下界
+    assert field.performance(3000) >= config.RATING_SEARCH_MIN
+
+
+def test_compose_team_rating():
+    """队伍综合 rating：一个人就是他自己，人越多 / 越强则越高。
+
+    定义是「能以 50% 概率打赢队里每一个人」所需的分数，所以加人只会让它变高，
+    绝不会变低——这条单调性是最容易写错的地方（比如误写成取平均或取最大）。
+    """
+    from cfhelper import rating
+    assert rating.compose_team_rating([]) is None
+    assert rating.compose_team_rating([1600]) == 1600           # 单人 = 本人
+    solo = rating.compose_team_rating([1600])
+    duo = rating.compose_team_rating([1600, 1600])
+    trio = rating.compose_team_rating([1600, 1600, 1600])
+    assert solo < duo < trio, f"人越多应该越强：{solo} {duo} {trio}"
+    # 三个 1600 明显强于 1600，但不该离谱到超过最强者 +600
+    assert 1700 < trio < 2200, trio
+    # 混合队伍：由整体决定，不是简单取最大值
+    assert rating.compose_team_rating([1200, 1600, 2000]) > 2000
+    # 0 / None 视为未评级，直接忽略而不是当 0 分算
+    assert rating.compose_team_rating([1600, 0, None]) == 1600
+
+
+def test_pick_tag_modes():
+    """刷题器的标签三态：任一命中 / 必须全含 / 排除。
+
+    "任一"和"全含"的区别在专项训练时是决定性的：想练"树形 DP"，
+    按"任一"会把纯树和纯 DP 的题全倒出来，只有"全含"才筛得准。
+    """
+    saved = list(cf_api.PROBLEMS)
+    try:
+        cf_api.PROBLEMS[:] = [
+            {"key": "1_A", "contest_id": 1, "index": "A", "name": "只有dp",
+             "rating": 1500, "tags": ["dp"]},
+            {"key": "1_B", "contest_id": 1, "index": "B", "name": "dp+树",
+             "rating": 1500, "tags": ["dp", "trees"]},
+            {"key": "1_C", "contest_id": 1, "index": "C", "name": "只有树",
+             "rating": 1500, "tags": ["trees"]},
+            {"key": "1_D", "contest_id": 1, "index": "D", "name": "dp+树+模拟",
+             "rating": 1500, "tags": ["dp", "trees", "implementation"]},
+        ]
+        def names(**kw):
+            got = analysis.pick_problems(1000, 2000, mode="sorted", count=10, **kw)
+            return sorted(p["name"] for p in got)
+
+        assert names(tags=["dp", "trees"]) == ["dp+树", "dp+树+模拟", "只有dp", "只有树"]
+        assert names(tags=["dp", "trees"], tag_mode="all") == ["dp+树", "dp+树+模拟"]
+        # 排除优先于包含：既选中又排除同一个标签，结果必然为空（而不是各按各的算）
+        assert names(tags=["dp"], ban_tags=["dp"]) == []
+        assert names(tags=["dp", "trees"], tag_mode="all",
+                     ban_tags=["implementation"]) == ["dp+树"]
+        assert names(ban_tags=["dp"]) == ["只有树"]        # 不选包含标签时，排除照样生效
+        assert len(names()) == 4                          # 都不选 = 全部
+    finally:
+        cf_api.PROBLEMS[:] = saved
+
+
+def test_upsolve_and_scatter():
+    """复盘页两块：该补的题 / 难度散点。"""
+    now = int(time.time())
+    saved = list(cf_api.PROBLEMS)
+    try:
+        cf_api.PROBLEMS[:] = [
+            {"key": "10_A", "contest_id": 10, "index": "A", "name": "打过·简单",
+             "rating": 900, "tags": ["math"]},          # 差太多，滤掉
+            {"key": "10_B", "contest_id": 10, "index": "B", "name": "打过·没做出",
+             "rating": 1600, "tags": ["dp"]},
+            {"key": "10_C", "contest_id": 10, "index": "C", "name": "打过·卡住过",
+             "rating": 1500, "tags": ["dp"]},
+            {"key": "10_D", "contest_id": 10, "index": "D", "name": "打过·已解出",
+             "rating": 1550, "tags": ["dp"]},
+            {"key": "99_A", "contest_id": 99, "index": "A", "name": "没打过的比赛",
+             "rating": 1600, "tags": ["dp"]},           # 没参加过，滤掉
+        ]
+        hist = [{"contest_id": 10, "name": "打过的那场", "time": now - 5 * 86400,
+                 "new_rating": 1500, "rank": 100, "old_rating": 1480, "rating_change": 20}]
+        subs = [
+            {"verdict": "OK", "creationTimeSeconds": now - 5 * 86400,
+             "problem": {"contestId": 10, "index": "D", "rating": 1550, "tags": ["dp"], "name": "D"}},
+            {"verdict": "WRONG_ANSWER", "creationTimeSeconds": now - 5 * 86400,
+             "problem": {"contestId": 10, "index": "C", "rating": 1500, "tags": ["dp"], "name": "C"}},
+        ]
+        got = analysis.upsolve_candidates(subs, hist, 1500)
+        names = [p["name"] for p in got]
+        assert "打过·已解出" not in names, "已经解出的题不该再出现在待补清单里"
+        assert "没打过的比赛" not in names, "只列参加过的比赛"
+        assert "打过·简单" not in names, "难度差超过 span 的要滤掉"
+        assert names[0] == "打过·卡住过", f"交过没过的题必须排最前：{names}"
+        assert set(names) == {"打过·卡住过", "打过·没做出"}, names
+        assert got[0]["stuck"] is True and got[1]["stuck"] is False
+
+        # 没有比赛记录时不该瞎推荐
+        assert analysis.upsolve_candidates(subs, [], 1500) == []
+
+        sc = analysis.solve_scatter(subs, hist)
+        assert sc["count"] == 1 and sc["points"][0]["r"] == 1550   # 只有 AC 的题进散点
+        assert sc["trend"] and sc["trend"][0]["n"] == 1
+        assert sc["rating_line"] and sc["rating_line"][0]["r"] == 1500
+        assert analysis.solve_scatter([], [])["count"] == 0
+    finally:
+        cf_api.PROBLEMS[:] = saved
+
+
+def test_predict_falls_back_without_model():
+    """没抓过实测数据时，预测必须退回手工校准表，而不是空表或报错。
+
+    这条是"开箱即用"的底线：新用户第一次打开就得看到预测，
+    抓取是可选的增强，不能变成必须先跑 4 分钟才能用。
+    """
+    from cfhelper import predict
+    saved = predict._model
+    try:
+        predict._model = {}                       # 假装没有模型
+        table, basis = predict.predict(1500, "Div.2")
+        assert table and basis["measured"] is False
+        assert set(table[0]) >= {"rank", "performance", "rating_change", "new_rating"}
+        # 有模型时要走实测分支
+        predict._model = {"Div.2": [{
+            "id": 1, "name": "造的一场", "start_ts": 0, "n": 1000, "problems": 3,
+            "hist": {"1200": 500, "1600": 500},
+            "k_rank": {"0": 900, "1": 500, "2": 100, "3": 10},
+        }]}
+        table, basis = predict.predict(1500, "Div.2")
+        assert basis["measured"] is True and basis["samples"][0]["name"] == "造的一场"
+        deltas = [table[k]["rating_change"] for k in sorted(table)]
+        assert deltas == sorted(deltas), f"多解一题涨分不该变少：{deltas}"
+        perfs = [table[k]["performance"] for k in sorted(table)]
+        assert perfs == sorted(perfs), f"多解一题表现分不该变低：{perfs}"
+    finally:
+        predict._model = saved
+
+
+def test_predict_k_rank_must_be_monotonic():
+    """建模时必须保证"多解一题，名次更靠前"。
+
+    真踩过：榜单里缺了约三成选手，把"只在涨分记录里"的人当成 0 题，
+    算出解 1 题的中位名次比解 0 题还差，表格里就会出现一眼假的结果。
+    """
+    from cfhelper import predict
+    ok = predict._monotonic_k_rank({0: [900] * 10, 1: [500] * 10, 2: [100] * 10})
+    assert ok == {"0": 900, "1": 500, "2": 100}
+    # 名次没有变好的档要被丢掉
+    bad = predict._monotonic_k_rank({0: [500] * 10, 1: [900] * 10, 2: [100] * 10})
+    assert "1" not in bad and bad["2"] == 100, bad
+    # 样本太少的档同样丢掉
+    few = predict._monotonic_k_rank({0: [900] * 10, 5: [1]})
+    assert "5" not in few, few
+
+
+def test_icpc_nearly_done():
+    """「差几题就打穿」：按剩余题数升序，且只收录打过但没打穿的场次。"""
+    from cfhelper import icpc
+    contests_ = [
+        {"id": 1, "name": "剩1题", "url": "u1", "year": 2024, "tier": "regional", "gym": True},
+        {"id": 2, "name": "剩3题", "url": "u2", "year": 2023, "tier": "wf", "gym": True},
+        {"id": 3, "name": "全解出", "url": "u3", "year": 2022, "tier": "regional", "gym": True},
+        {"id": 4, "name": "一题没做", "url": "u4", "year": 2021, "tier": "regional", "gym": True},
+        {"id": 5, "name": "题单未知", "url": "u5", "year": 2020, "tier": "regional", "gym": True},
+    ]
+    progress = {
+        1: {"count": 12, "total": 13, "pct": 92, "tried": 1},
+        2: {"count": 9, "total": 12, "pct": 75, "tried": 0},
+        3: {"count": 13, "total": 13, "pct": 100, "tried": 0},
+        4: {"count": 0, "total": 13, "pct": 0, "tried": 2},
+        5: {"count": 5, "total": None, "pct": None, "tried": 0},
+    }
+    rows = icpc.nearly_done(contests_, progress)
+    assert [r["name"] for r in rows] == ["剩1题", "剩3题"], [r["name"] for r in rows]
+    assert rows[0]["left"] == 1 and rows[1]["left"] == 3
+    assert rows[0]["tier_cls"] == "tier-reg" and rows[1]["tier_cls"] == "tier-wf"
+    assert icpc.nearly_done(contests_, {}) == []
+
+
+def test_standings_params_non_gym_must_be_bare():
+    """非 gym 的 contest.standings 只能带 contestId，一个额外参数都不行。
+
+    CF 的原话是 "...available only via anonymous GET requests with **no extra
+    parameters**"。重点是后半句：不只是不能签名，from / count / showUnofficial
+    照样会被拒。实测 6 种参数组合，只有裸 contestId 能过。
+    这条一旦写错，官方赛的题单 / 奖牌线会 100% 失败，而且失败会被记成
+    「抓过但 CF 不开放」永久留在缓存里——现象和"这场本来就没数据"一模一样，极难发现。
+    """
+    assert cf_api.standings_params(2041, gym=False, gym_extra={"from": 1, "count": 1}) \
+        == {"contestId": 2041}, "非 gym 请求带了额外参数，CF 必拒"
+    assert cf_api.standings_params(2041, gym=False) == {"contestId": 2041}
+
+    # gym 侧相反：必须签名，且分页参数要原样带上
+    orig, cf_api._cred, cf_api._cred_loaded = (cf_api._cred, cf_api._cred_loaded), ("K", "S"), True
+    try:
+        p = cf_api.standings_params(105578, gym=True, gym_extra={"from": 1, "count": 1})
+        assert p["contestId"] == 105578 and p["from"] == 1 and p["count"] == 1
+        assert p["apiKey"] == "K" and "apiSig" in p and "time" in p
+        cf_api._cred = None                       # 没密钥时必须降级为 None，而不是裸请求
+        assert cf_api.standings_params(105578, gym=True) is None
+    finally:
+        cf_api._cred, cf_api._cred_loaded = orig[0], orig[1]
+
+
+def test_icpc_problem_list_states():
+    """题单三态：已覆盖 / 没抓过 / 抓过但 CF 不开放。
+
+    第三种必须和第二种分开——否则页面会一直催用户去抓那些永远抓不到的受限赛事。
+    """
+    from cfhelper import icpc
+    from cfhelper.paths import data_path
+    orig_file, orig_plist = config.ICPC_PROBLEMS_FILE, icpc._plist
+    config.ICPC_PROBLEMS_FILE = "cf_icpc_problems_test.json"
+    path = data_path(config.ICPC_PROBLEMS_FILE)
+    saved = list(cf_api.PROBLEMS)
+    try:
+        # 111 用新格式（带题名），444 用旧格式（只有题号）—— 两种都要能读
+        icpc._plist = {"111": [["A", "Alpha"], ["B", "Beta"], ["C", "Gamma"]],
+                       "222": [],                            # 抓过但 CF 不开放
+                       "444": ["A", "B"]}
+        cf_api.PROBLEMS[:] = []
+        contests = [{"id": 111, "gym": True, "tier": "regional"},
+                    {"id": 222, "gym": True, "tier": "regional"},
+                    {"id": 333, "gym": True, "tier": "regional"}]
+        assert [p["i"] for p in icpc.contest_problems(111)] == ["A", "B", "C"]
+        assert icpc.contest_problems(111)[0]["n"] == "Alpha"  # 题名读得出
+        assert icpc.contest_problems(222) is None             # 空列表按拿不到处理
+        assert icpc.contest_problems(333) is None
+        legacy = icpc.contest_problems(444)                   # 旧格式向后兼容
+        assert [p["i"] for p in legacy] == ["A", "B"] and legacy[0]["n"] == ""
+        st = icpc.problem_fetch_state(contests)
+        assert st["covered"] == 1 and st["unavailable"] == 1 and st["missing"] == 1
+
+        # 没配密钥时，全是 gym 的任务不该启动（省掉注定失败的请求）
+        if not cf_api.has_api_key():
+            assert icpc.fetch_missing_data(contests) is False
+    finally:
+        config.ICPC_PROBLEMS_FILE, icpc._plist = orig_file, orig_plist
+        cf_api.PROBLEMS[:] = saved
+        for p in (path, path + ".tmp", path + ".bad"):
+            if os.path.exists(p):
+                os.remove(p)
+
+
+def test_feedback_page_leaks_nothing():
+    """反馈页的自动收集必须是白名单式的：只放排查必需、与身份无关的项。
+
+    issue 是公开且基本永久的，一旦把 CF 用户名 / 密钥 / 本地路径带进去就收不回来。
+    这里把约束钉死，避免以后往诊断里"顺手多加一个字段"时踩雷。
+    """
+    import json
+    import re
+    from cfhelper import create_app
+    client = create_app().test_client()
+    r = client.get("/feedback")
+    assert r.status_code == 200
+    html = r.data.decode("utf-8")
+
+    # 服务端注入的诊断字段必须严格限定在这几项内
+    m = re.search(r'id="fbDiag">(.*?)</script>', html, re.S)
+    diag = json.loads(m.group(1))
+    assert set(diag) == {"version", "has_key", "contests", "problems", "medals"}, \
+        f"诊断字段被改动了，请先确认新字段不含身份信息：{set(diag)}"
+    assert diag["has_key"] in ("是", "否"), "密钥只能报有没有，绝不能报内容"
+
+    # 页面与前端脚本都不得出现绝对路径（会带出 Windows 用户名）
+    assert not re.search(r"[A-Za-z]:\\\\", html), "页面里出现了本地盘符路径"
+    js = client.get("/static/js/feedback.js").data.decode("utf-8")
+    assert "token" not in js.lower(), "反馈脚本里不该出现 token"
+    assert "fetch(" not in js, "反馈脚本不该向任何地址发请求——只生成链接交给用户"
+    assert "issues/new" in js, "应生成预填的 issue 链接"
+
+
+def test_state_changing_endpoints_guarded():
+    """改状态的端点必须 POST-only 且拒绝跨站 Origin。
+
+    工具虽然只听 127.0.0.1，但你浏览的任意网页都能往 localhost 发请求：
+    以前 <img src="http://127.0.0.1:5000/shutdown"> 就能关掉进程，
+    /api/remove_army?handle=x 也能删掉队友。
+    """
+    from cfhelper import create_app
+    client = create_app().test_client()
+    changing = ("/shutdown", "/api/add_army?handle=x", "/api/remove_army?handle=x",
+                "/api/refresh_army", "/api/todo/remove?key=1_A")
+    for url in changing:
+        assert client.get(url).status_code == 405, f"{url} 不该接受 GET"
+        r = client.post(url, headers={"Origin": "https://evil.example"})
+        assert r.status_code == 403, f"{url} 不该接受跨站 Origin"
+    # 同源与不带 Origin 的正常调用照旧放行
+    for url in ("/api/add_army?handle=", "/api/todo/remove?key=zzz_1"):
+        assert client.post(url).status_code == 200
+        assert client.post(url, headers={"Origin": "http://localhost"}).status_code == 200
+    assert client.get("/heartbeat").status_code == 200      # 只读端点不受影响
+
+
+def test_user_cache_bounded():
+    """回归守护：用户缓存不能只增不减。
+
+    _cache_get 只在读取时判过期、不删条目，subs 又存着完整提交记录，
+    不在写入侧回收的话，长时间开着 + 查得多，内存只涨不落。
+    """
+    saved = dict(cf_api._user_cache)
+    cf_api._user_cache.clear()
+    try:
+        for i in range(config.USER_CACHE_MAX * 3):
+            cf_api._cache_put(("subs", f"u{i}"), [i] * 50)
+            assert len(cf_api._user_cache) <= config.USER_CACHE_MAX, "缓存超出上限"
+        assert cf_api._cache_get(("subs", f"u{config.USER_CACHE_MAX * 3 - 1}")) is not None  # 最新的还在
+        assert cf_api._cache_get(("subs", "u0")) is None                                     # 最旧的已淘汰
+    finally:
+        cf_api._user_cache.clear()
+        cf_api._user_cache.update(saved)
+
+
+def test_shutdown_grace():
+    """回归守护：/shutdown 不能让看门狗立刻判超时。
+
+    顶栏跳转等应用内导航也会触发 pagehide 发信标，新页面的第一次心跳要等它加载完才到。
+    旧版把 _last_heartbeat 置 0（now - 0 远大于 30），看门狗可能在这个空档里把进程
+    杀在跳转途中。现在留 SHUTDOWN_GRACE 秒宽限，任意一次心跳都能取消退出。
+    """
+    import cfhelper.routes as routes
+    would_exit = lambda: time.time() - routes._last_heartbeat > config.HEARTBEAT_TIMEOUT
+    saved = routes._last_heartbeat
+    try:
+        routes._request_shutdown()
+        assert not would_exit()                     # 关键：不是立刻超时
+        routes._touch()                             # 新页面加载后的心跳
+        assert not would_exit()                     # 退出已取消
+        routes._request_shutdown()
+        routes._last_heartbeat -= config.SHUTDOWN_GRACE + 1     # 宽限期走完
+        assert would_exit()                         # 真关页面仍会正常退出
+    finally:
+        routes._last_heartbeat = saved
+
+
+def _malformed_attrs(html):
+    """把 HTML 交给解析器，挑出不像标识符的属性名。
+
+    属性值里直接写半角引号会把属性**提前截断**，剩下的半句会被解析成一个新属性名。
+    页面不会报任何错，只是那段文案凭空少了一半——反馈页的 placeholder 就这么被腰斩过。
+    """
+    from html.parser import HTMLParser
+
+    class _Scan(HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=True)
+            self.bad = []
+
+        def handle_starttag(self, tag, attrs):
+            for name, _v in attrs:
+                if not name.isascii() or not name.replace("-", "").replace("_", "") \
+                        .replace(":", "").isalnum():
+                    self.bad.append(f"<{tag}> {name!r}")
+
+        handle_startendtag = handle_starttag
+
+    s = _Scan()
+    s.feed(html)
+    return s.bad
+
+
+def test_render_offline():
+    """离线渲染各页（不打网络），守护 base 模板继承与新路由不挂。
+
+    渲染首页会走 contests 的"缓存过期就重建"逻辑；拦掉网络后重建出的是空列表。
+    必须把缓存文件改到临时名下，否则会把 0 场比赛写进真实的
+    data/cf_upcoming_contests.json，害得之后一小时首页日历全空。
+
+    顺带把每页的 HTML 过一遍解析器：模板里的引号写错不会报错、只会悄悄吞掉半句文案，
+    肉眼几乎发现不了，交给解析器一查就现形（见 _malformed_attrs）。
+    """
+    from cfhelper import create_app
+    from cfhelper.paths import data_path
+    orig_getter = cf_api.get_contest_list
+    orig_files = (config.CONTEST_CACHE_FILE, config.ICPC_CACHE_FILE)
+    # 签名要跟真函数一致：ICPC 比赛库会以 gym=True 调用它，只写 lambda: [] 会 TypeError
+    cf_api.get_contest_list = lambda gym=False: []
+    config.CONTEST_CACHE_FILE = "cf_contests_test.json"
+    config.ICPC_CACHE_FILE = "cf_icpc_test.json"
+    paths = [data_path(config.CONTEST_CACHE_FILE), data_path(config.ICPC_CACHE_FILE)]
+    try:
+        client = create_app().test_client()
+        for p in ("/", "/picker", "/icpc", "/team", "/vs", "/todo", "/feedback"):
+            r = client.get(p)
+            assert r.status_code == 200, f"{p} -> {r.status_code}"
+            assert "CF 团队助手".encode() in r.data
+            bad = _malformed_attrs(r.data.decode("utf-8"))
+            assert not bad, f"{p} 有被引号截断的属性：{bad}"
+    finally:
+        cf_api.get_contest_list = orig_getter
+        config.CONTEST_CACHE_FILE, config.ICPC_CACHE_FILE = orig_files
+        for base in paths:
+            for p in (base, base + ".tmp", base + ".bad"):
+                if os.path.exists(p):
+                    os.remove(p)
+
+
+def test_icpc_collect_needs_both_sources():
+    """比赛库只有两份数据都拉到才算数，缺一份要返回 None。
+
+    gym 那份就占了 157/160 场。它失败时若照常返回，get_contests 会把这份残缺结果
+    当成完整比赛库**缓存七天**——页面上 160 场缩成 3 场，而且一周内怎么刷新都是 3 场。
+    返回 None 才能走到"宁可用过期缓存"的分支。
+    """
+    from cfhelper import icpc
+    from cfhelper.paths import data_path
+    gym_rows = [{"id": 104000, "name": "The 2024 ICPC Asia Nanjing Regional Contest",
+                 "startTimeSeconds": 1700000000}]
+    off_rows = [{"id": 2041, "name": "2024 ICPC Asia Taichung Regional Contest",
+                 "startTimeSeconds": 1710000000}]
+    orig_getter, orig_file = cf_api.get_contest_list, config.ICPC_CACHE_FILE
+    config.ICPC_CACHE_FILE = "cf_icpc_collect_test.json"
+    path = data_path(config.ICPC_CACHE_FILE)
+
+    def stub(gym_ok, off_ok):
+        cf_api.get_contest_list = (
+            lambda gym=False: (gym_rows if gym_ok else None) if gym else (off_rows if off_ok else None))
+
+    try:
+        stub(True, True)
+        assert len(icpc._collect()) == 2
+        stub(False, True)
+        assert icpc._collect() is None, "gym 挂了却返回了残缺比赛库"
+        stub(True, False)
+        assert icpc._collect() is None, "official 挂了却返回了残缺比赛库"
+
+        # 端到端：抓取失败时不能把已有缓存覆盖成残缺的
+        stub(True, True)
+        assert len(icpc.get_contests(force=True)) == 2
+        stub(False, True)
+        assert len(icpc.get_contests(force=True)) == 2          # 回退旧缓存
+        from cfhelper.paths import read_json
+        assert len((read_json(config.ICPC_CACHE_FILE) or {}).get("contests") or []) == 2
+    finally:
+        cf_api.get_contest_list, config.ICPC_CACHE_FILE = orig_getter, orig_file
+        for p in (path, path + ".tmp", path + ".bad"):
+            if os.path.exists(p):
+                os.remove(p)
+
+
+def test_css_never_hardcodes_svg_fill():
+    """CSS 里不能写死 fill:url(#...)。
+
+    走势图的渐变 id 是每张图一份（app.js 里的 rcg1、rcg2…），只能由元素自己的
+    fill 属性指定。而 **CSS 声明的优先级高于 SVG 的 fill 表现属性**——CSS 里写死一个
+    固定 id，就会把正确的 url(#rcgN) 顶掉、指向一个不存在的渐变，
+    面积整块画不出来。页面不报错，只是图"少了一层底色"，很难发现。
+    """
+    import re
+    from cfhelper.paths import resource_path
+    css = open(resource_path("cfhelper", "static", "css", "style.css"), encoding="utf-8").read()
+    css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)             # 注释里提到不算
+    hits = re.findall(r"fill\s*:\s*url\([^)]*\)", css)
+    assert not hits, f"CSS 写死了 SVG 渐变引用：{hits}"
+
+
+def test_div2_copy_maps_to_problemset():
+    """Div.1/Div.2 共用题：题库只收 Div.1 那份，Div.2 交的题要映射回去（实测 1944C = 1943A）。"""
+    fake = [
+        {"key": "1943_A", "contest_id": 1943, "index": "A", "name": "MEX Game 1", "rating": 1300, "tags": ["games"]},
+        {"key": "1944_A", "contest_id": 1944, "index": "A", "name": "Destroying Bridges", "rating": 800, "tags": []},
+        # 同一时刻开赛、同名却不是同一道题（实测 627E 与 635A 都叫 Orchestra）
+        {"key": "627_E", "contest_id": 627, "index": "E", "name": "Orchestra", "rating": 3000, "tags": []},
+        {"key": "635_A", "contest_id": 635, "index": "A", "name": "Orchestra", "rating": 1100, "tags": []},
+    ]
+    starts = {1943: 100, 1944: 100, 627: 200, 635: 200, 700: 300}
+    saved = (list(cf_api.PROBLEMS), dict(cf_api.PROBLEM_RATING),
+             dict(cf_api._PROBLEM_BY_IDENT), dict(cf_api._CONTEST_START))
+    cf_api.PROBLEMS[:] = fake
+    cf_api.PROBLEM_RATING.clear()
+    cf_api.PROBLEM_RATING.update({p["key"]: p["rating"] for p in fake})
+    cf_api._CONTEST_START.clear()
+    cf_api._CONTEST_START.update(starts)
+    cf_api._PROBLEM_BY_IDENT.clear()
+    for p in fake:
+        cf_api._PROBLEM_BY_IDENT.setdefault((p["name"], starts[p["contest_id"]]), []).append(p["key"])
+    try:
+        ck = cf_api.canonical_key
+        assert ck(1944, "C", "MEX Game 1") == "1943_A"          # Div.2 那份 → 题库那份
+        assert ck(1943, "A", "MEX Game 1") == "1943_A"          # 本来就在题库里，不动
+        assert ck(635, "A", "Orchestra") == "635_A"             # 题库里有，不按题名乱配
+        assert ck(636, "B", "Orchestra") == "636_B"             # 开赛时间对不上，不配
+        cf_api._PROBLEM_BY_IDENT[("Twin", 300)] = ["700_A", "700_B"]
+        assert ck(701, "C", "Twin") == "701_C"                  # 候选不唯一，宁可不认
+
+        subs = [{"verdict": "OK", "creationTimeSeconds": 1,
+                 "problem": {"contestId": 1944, "index": "C", "name": "MEX Game 1",
+                             "rating": 1300, "tags": ["games"]}},
+                {"verdict": "OK", "creationTimeSeconds": 2,
+                 "problem": {"contestId": 1943, "index": "A", "name": "MEX Game 1",
+                             "rating": 1300, "tags": ["games"]}}]
+        assert analysis.solved_keys_of(subs) == {"1943_A"}
+        assert analysis.analyze_problems(subs)["ac"] == 1       # 两份只算一题（cfviz 记的坑）
+        # 推荐 / 刷题器不能把做过的题再推一遍
+        picked = analysis.pick_problems(800, 3500, solved_keys=analysis.solved_keys_of(subs[:1]),
+                                        mode="sorted", count=50)
+        assert "1943_A" not in {p["key"] for p in picked}
+        # 洛谷链接用题库那份的 key（CF1944C 在洛谷是 404，CF1943A 才有）
+        assert all(p["luogu"] == "https://www.luogu.com.cn/problem/CF" + p["key"].replace("_", "")
+                   for p in picked)
+    finally:
+        cf_api.PROBLEMS[:] = saved[0]
+        cf_api.PROBLEM_RATING.clear(); cf_api.PROBLEM_RATING.update(saved[1])
+        cf_api._PROBLEM_BY_IDENT.clear(); cf_api._PROBLEM_BY_IDENT.update(saved[2])
+        cf_api._CONTEST_START.clear(); cf_api._CONTEST_START.update(saved[3])
+
+
+def run_offline():
+    tests = [v for k, v in globals().items() if k.startswith("test_")]
+    for t in tests:
+        t()
+        print(f"  ✅ {t.__name__}")
+    print(f"离线测试通过：{len(tests)} 项\n")
+
+
+def run_net():
+    from cfhelper import cf_api, create_app
+    print("加载题库缓存...")
+    cf_api.load_problem_cache()
+    recos = analysis.recommend_problems(1300, 1700, ["dp"], set(), limit=5)
+    assert recos and all(1300 <= p["rating"] <= 1700 for p in recos)
+    print(f"  ✅ 推荐题目 {len(recos)} 道")
+
+    app = create_app()
+    c = app.test_client()
+    r = c.post("/", data={"handles": "tourist", "contest_type": "Div.1"})
+    assert r.status_code == 200 and "传奇宗师".encode() in r.data
+    print("  ✅ 端到端 POST / 渲染成功")
+    print("实网测试通过\n")
+
+
+if __name__ == "__main__":
+    print("=== 离线纯函数测试 ===")
+    run_offline()
+    if "--net" in sys.argv:
+        print("=== 实网端到端测试 ===")
+        run_net()
+    print("全部通过 ✅")

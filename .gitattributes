@@ -1,0 +1,11 @@
+# 统一换行风格，避免不同机器 checkout 出混合换行（Windows 的 core.autocrlf 会默认转 CRLF）。
+# 本项目源码 / 文档一律 LF；Windows 批处理必须 CRLF 才能可靠执行。
+* text=auto eol=lf
+
+*.bat text eol=crlf
+
+# 二进制资源不做任何换行转换
+*.exe binary
+*.ico binary
+*.png binary
+*.jpg binary

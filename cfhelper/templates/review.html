@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}复盘 | CF 团队助手{% endblock %}
+
+{% block body %}
+<div class="card">
+  <h2>📈 复盘</h2>
+  <p class="muted">两件事：<strong>你的刷题难度到底有没有往上走</strong>，
+    以及<strong>你打过的比赛里还有哪些题没做出来</strong>。
+    热力图只回答"有没有在刷"，这一页回答"刷得对不对"。</p>
+  <form method="post" class="search-box" id="rvForm">
+    <input type="text" name="handle" id="rvInput" required value="{{ prefill }}"
+           placeholder="一个 CF 用户名，例：tourist">
+    <button type="submit" class="btn-primary">📈 生成复盘</button>
+  </form>
+  {% if army %}
+  <div style="margin-top:12px;">
+    <span class="muted">从大部队快速填入：</span>
+    {% for m in army %}<span class="chip pick-army" data-h="{{ m.handle }}">{{ m.handle }}</span>{% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+{% if errors %}
+<div class="alert">⚠️ {{ errors|join('；') }}</div>
+{% endif %}
+
+{% if result %}
+<div class="card">
+  <h3>📊 {{ result.handle }} · 近 {{ scatter_days }} 天刷题难度轨迹
+    <span class="muted" style="font-size:.7em;font-weight:400;">共 {{ result.scatter.count }} 道带难度分的题</span></h3>
+  {% if result.scatter.count > 1 %}
+  <p class="muted">每个点是一道题<b>第一次解出</b>的时间与难度；
+    <span class="sc-legend-line"></span> 是<strong>月度中位难度</strong>（单点噪声太大，看中位线才看得出趋势）；
+    <span class="sc-legend-rating"></span> 是同期 Rating。
+    点长期贴在一条水平线上 = 在舒适区原地打转。</p>
+  <div class="sc-chart" data-handle="{{ result.handle }}">
+    <script type="application/json" class="sc-data">{{ result.scatter|tojson }}</script>
+  </div>
+  {% else %}
+  <p class="muted">近 {{ scatter_days }} 天带难度分的解题太少（{{ result.scatter.count }} 道），画不出趋势。</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h3>🧩 {{ result.handle }} · 该补的题
+    <span class="muted" style="font-size:.7em;font-weight:400;">你打过的 {{ result.contests }} 场比赛里没解出的</span></h3>
+  <p class="muted">这些题<strong>你当场就见过</strong>，思路卡在哪还有印象，补起来比随机做一道同难度的新题划算。
+    只列难度在你当前分 ±{{ span }} 以内的：太简单没意义，太难当场做不出、赛后也啃不动。
+    <b class="down">🔴 卡住</b> = 当时交过但没过，比压根没点开的更该先补。</p>
+  {% if not result.problems_ready %}
+  <p class="muted">⏳ 题库仍在后台加载，请几秒后刷新本页。</p>
+  {% elif result.upsolve %}
+  <div class="reco-grid">
+    {% for p in result.upsolve %}
+    <a class="reco-card{{ ' us-stuck' if p.stuck else '' }}" href="{{ p.url }}" target="_blank">
+      <span class="star" title="加入题单" onclick="event.preventDefault();event.stopPropagation();todoAdd(this)"
+            data-key="{{ p.key }}" data-name="{{ p.name }}" data-rating="{{ p.rating }}" data-tags="{{ p.tags|join(',') }}">☆</span>
+      <span class="reco-name">{{ p.index }}. {{ p.name }}</span>
+      <span class="reco-rating">{{ p.rating }}</span>
+      <span class="lg-link" title="洛谷中文题面（约九成 CF 题已收录，少数 ICPC 镜像赛没有）" data-lg="{{ p.luogu }}" onclick="event.preventDefault();event.stopPropagation();openLuogu(this)">洛谷</span>
+      {% if p.stuck %}<span class="diff-tag d-exp2" style="font-size:.75em;">🔴 卡住</span>{% endif %}
+      <div class="muted" style="font-size:.8em;margin-top:5px;">{{ p.contest }}</div>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">你打过的比赛里，这个难度带的题都解出来了 🎉 —— 去 <a href="/picker">🎲 刷题器</a> 换更高的档。</p>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}<script src="{{ url_for('static', filename='js/review.js') }}"></script>{% endblock %}
