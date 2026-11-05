@@ -70,6 +70,11 @@ a:hover{text-decoration:underline;}
   border-bottom:2px solid var(--primary);backdrop-filter:blur(6px);}
 .topbar h1{font-size:1.5em;margin:0;border:none;flex:1;}
 .topbar .ver{font-size:.5em;color:var(--muted);font-weight:400;margin-left:6px;}
+/* 紧跟版本号的 GitHub 仓库链接：负边距抵掉一半 flex 间距，让它贴着版本号；悬停描边变金色 */
+.gh-star{flex-shrink:0;white-space:nowrap;margin-left:-6px;padding:4px 11px;border-radius:999px;
+  font-size:.82em;font-weight:600;color:var(--text);background:var(--bg-soft);
+  border:1px solid var(--border);transition:.2s;}
+.gh-star:hover{text-decoration:none;color:var(--warn);border-color:var(--warn);transform:translateY(-1px);}
 .icon-btn{background:var(--bg-soft);border:1px solid var(--border);color:var(--text);
   width:42px;height:42px;border-radius:50%;cursor:pointer;font-size:1.15em;transition:.2s;}
 .icon-btn:hover{transform:translateY(-2px);box-shadow:var(--shadow);}
@@ -469,4 +474,8 @@ html[data-theme="dark"] .icpc-medal .mb{color:#d19a6a;}
   .topbar h1{font-size:1.15em;} .histo-label{width:78px;} .card{padding:18px;}
   .topnav a{padding:6px 9px;font-size:.82em;} .wall-label{width:90px;} .wall-num{width:96px;}
   .vs-bigscore{font-size:1.6em;} .bb-label{width:92px;} .vs-name{font-size:1.05em;}
+}
+/* 手机宽度下顶栏本来就挤（标题被压成三行、导航四行），再塞 Star 链接会挤成竖排八行，让位 */
+@media(max-width:480px){
+  .gh-star{display:none;}
 }

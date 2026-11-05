@@ -1000,6 +1000,8 @@ def test_render_offline():
             r = client.get(p)
             assert r.status_code == 200, f"{p} -> {r.status_code}"
             assert "CF 团队助手".encode() in r.data
+            # 顶栏仓库链接必须新开标签页：在本页跳去 GitHub 会触发关闭信标，点一下 Star 程序就退出了
+            assert f'href="{config.REPO_URL}" target="_blank"'.encode() in r.data, f"{p} 顶栏缺少仓库链接"
             bad = _malformed_attrs(r.data.decode("utf-8"))
             assert not bad, f"{p} 有被引号截断的属性：{bad}"
     finally:

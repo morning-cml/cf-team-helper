@@ -15,6 +15,9 @@
 
 <div class="topbar">
   <h1>⚔️ CF 团队助手<span class="ver">v{{ version }}</span></h1>
+  {# 必须新开标签页：在本页跳去 GitHub 会触发关闭信标，程序随之退出（见 app.js 的 pagehide） #}
+  <a class="gh-star" href="{{ repo_url }}" target="_blank" rel="noopener noreferrer"
+     title="CF 团队助手已在 GitHub 开源，觉得好用就点个 Star 支持一下吧！">⭐ 点个 Star</a>
   <nav class="topnav">
     <a href="/"       class="{{ 'active' if request.path == '/' else '' }}">🏠 首页</a>
     <a href="/picker" class="{{ 'active' if request.path == '/picker' else '' }}">🎲 刷题器</a>

@@ -152,9 +152,10 @@ def register(app):
 
     @app.context_processor
     def _inject_globals():
-        # 让所有模板都能用 {{ version }}、题单数量（顶栏徽标）与近况统计门槛，各页无需各自传递
-        return {"version": config.APP_VERSION, "todo_count": len(todo.load()),
-                "min_recent": config.MIN_RECENT_PROBLEMS}
+        # 让所有模板都能用 {{ version }}、仓库地址（顶栏 Star 链接 / 反馈页）、题单数量（顶栏徽标）
+        # 与近况统计门槛，各页无需各自传递
+        return {"version": config.APP_VERSION, "repo_url": config.REPO_URL,
+                "todo_count": len(todo.load()), "min_recent": config.MIN_RECENT_PROBLEMS}
 
     @app.route("/heartbeat")
     def heartbeat():
@@ -495,7 +496,6 @@ def register(app):
         total = st.get("total_contests", 0)
         return render_template(
             "feedback.html",
-            repo_url=config.REPO_URL,
             url_limit=config.FEEDBACK_URL_LIMIT,
             # 白名单式收集：只放排查必需、且与身份无关的项。
             # 绝不含密钥、CF 用户名、题单内容、本地路径（路径会带出 Windows 用户名）。
