@@ -3,6 +3,8 @@
 本地运行的 Codeforces 训练助手，适合个人刷题和 ICPC 组队训练：看 Rating、预测涨跌分、找短板、按条件出题、安排队伍分工。
 Windows 下载即用，关掉网页自动退出；只调用 Codeforces 官方 API，数据都存在本机。
 
+![tourist 的 Rating 走势与近一年刷题热力图](docs/screenshots/home.png)
+
 ## ✨ 功能
 
 - **🏠 首页**：Rating 走势、按 CF 官方算法预测涨跌分、弱点墙、训练计划与题目推荐、刷题热力图、未来 30 天比赛日历、关注队友
@@ -12,6 +14,17 @@ Windows 下载即用，关掉网页自动退出；只调用 Codeforces 官方 AP
 - **🆚 对比**：两人交锋记录、Rating 走势同图、各项数据对比
 - **📈 复盘**：刷题难度的变化轨迹，以及打过的比赛里还没补的题
 - **⭐ 题单**：收藏待做的题，跨会话保留
+
+<table>
+  <tr>
+    <td width="50%"><a href="docs/screenshots/icpc.png"><img src="docs/screenshots/icpc.png" alt="ICPC 比赛库"></a><br><sub>🏆 区域赛奖牌线，以及 jiangly 每道题的完成情况</sub></td>
+    <td width="50%"><a href="docs/screenshots/vs.png"><img src="docs/screenshots/vs.png" alt="对比"></a><br><sub>🆚 tourist vs jiangly：134 场同场交锋</sub></td>
+  </tr>
+  <tr>
+    <td><a href="docs/screenshots/team.png"><img src="docs/screenshots/team.png" alt="组队作战"></a><br><sub>🤝 tourist + zhoukangyang + ecnerwala：队伍综合 Rating 与分工</sub></td>
+    <td><a href="docs/screenshots/predict.png"><img src="docs/screenshots/predict.png" alt="涨跌分预测"></a><br><sub>🎯 tourist 打 Global Round：要做出 9 题、排进前 3 才能涨分</sub></td>
+  </tr>
+</table>
 
 ## 📥 下载即用
 
